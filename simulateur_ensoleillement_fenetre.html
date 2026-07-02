@@ -173,6 +173,13 @@
   .metric.highlight .value{color:var(--sun-strong);}
 
   .note{font-size:12px;color:var(--text-muted);margin-top:16px;line-height:1.5;}
+  .ha-btn{
+    width:100%;padding:9px 14px;border:none;border-radius:6px;
+    background:var(--sun);color:var(--bg);font-family:'IBM Plex Sans',sans-serif;
+    font-weight:600;font-size:13px;cursor:pointer;transition:opacity .15s;
+  }
+  .ha-btn:hover{opacity:0.85;}
+  .ha-btn:disabled{opacity:0.4;cursor:not-allowed;}
 </style>
 </head>
 <body>
@@ -257,6 +264,24 @@
           </div>
           <p class="note">Hauteur du sommet de l'écran mesurée depuis le bas de la fenêtre. Distance mesurée horizontalement depuis le nu extérieur du mur.</p>
         </div>
+      </div>
+
+      <div class="panel">
+        <h2>Home Assistant</h2>
+        <div class="field">
+          <label>URL du serveur</label>
+          <input type="url" id="ha-url" value="http://homeassistant.local:8123" placeholder="http://homeassistant.local:8123">
+        </div>
+        <div class="field">
+          <label>Jeton d'accès (long-lived token)</label>
+          <input type="password" id="ha-token" placeholder="eyJ…">
+        </div>
+        <div class="field">
+          <label>Entité soleil <span class="val" id="v-ha-sun">sun.sun</span></label>
+          <input type="text" id="ha-sun-entity" value="sun.sun">
+        </div>
+        <button id="ha-fetch" class="ha-btn">Récupérer depuis Home Assistant</button>
+        <div id="ha-status" class="status ok" style="margin-top:12px;display:none;"></div>
       </div>
     </div>
 
@@ -542,10 +567,108 @@ $('orient').addEventListener('change', ()=>{
   $('orient-custom-field').style.display = $('orient').value==='custom' ? 'block':'none';
   render();
 });
+$('ha-sun-entity').addEventListener('input', ()=>{
+  $('v-ha-sun').textContent=$('ha-sun-entity').value||'sun.sun';
+});
 $('screen-toggle').addEventListener('click', ()=>{
   $('screen-toggle').classList.toggle('on');
   $('screen-fields').classList.toggle('show');
   render();
+});
+
+// ---- Home Assistant integration ----
+function saveHAConfig(){
+  try{
+    localStorage.setItem('ha_url',$('ha-url').value);
+    localStorage.setItem('ha_token',$('ha-token').value);
+    localStorage.setItem('ha_entity',$('ha-sun-entity').value);
+  }catch(e){}
+}
+function loadHAConfig(){
+  try{
+    const url=localStorage.getItem('ha_url');
+    const token=localStorage.getItem('ha_token');
+    const entity=localStorage.getItem('ha_entity');
+    if(url) $('ha-url').value=url;
+    if(token) $('ha-token').value=token;
+    if(entity) $('ha-sun-entity').value=entity;
+  }catch(e){}
+}
+loadHAConfig();
+
+$('ha-fetch').addEventListener('click', async ()=>{
+  const btn=$('ha-fetch');
+  const status=$('ha-status');
+  const url=$('ha-url').value.replace(/\/+$/,'');
+  const token=$('ha-token').value.trim();
+  const entity=$('ha-sun-entity').value.trim();
+
+  saveHAConfig();
+
+  if(!token){
+    status.style.display='block';
+    status.className='status bad';
+    status.textContent='Veuillez saisir un jeton d\'accès.';
+    return;
+  }
+
+  btn.disabled=true;
+  btn.textContent='Connexion…';
+  status.style.display='none';
+
+  try{
+    const res=await fetch(`${url}/api/states/${encodeURIComponent(entity)}`,{
+      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'}
+    });
+    if(!res.ok){
+      const errText=await res.text().catch(()=>'');
+      throw new Error(errText || `HTTP ${res.status}`);
+    }
+    const data=await res.json();
+    const att=data.attributes||{};
+    const haElevation=att.elevation;
+    const haAzimuth=att.azimuth;
+
+    // set date to today
+    const today=new Date();
+    const yyyy=today.getFullYear();
+    const mm=String(today.getMonth()+1).padStart(2,'0');
+    const dd=String(today.getDate()).padStart(2,'0');
+    $('date').value=`${yyyy}-${mm}-${dd}`;
+
+    // set solar hour from sun elevation (iterate to find matching hour)
+    const lat=parseFloat($('lat').value);
+    const N=dayOfYear($('date').value);
+    // binary search on hour to match HA elevation
+    let lo=4, hi=21;
+    for(let i=0;i<30;i++){
+      const mid=(lo+hi)/2;
+      const pos=sunPosition(lat,N,mid);
+      if(pos.h<haElevation) lo=mid;
+      else hi=mid;
+    }
+    const foundHour=(lo+hi)/2;
+    const clampedHour=Math.max(4,Math.min(21,foundHour));
+    $('hour').value=clampedHour;
+
+    // update value displays
+    const hh=parseFloat($('hour').value);
+    const hFloor=Math.floor(hh), hMin=Math.round((hh-hFloor)*60);
+    $('v-hour').textContent=String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
+
+    status.style.display='block';
+    status.className='status ok';
+    status.textContent=`Données récupérées — élévation ${haElevation.toFixed(1)}°, azimut ${haAzimuth.toFixed(1)}° (HA) → heure réglée vers ${$('v-hour').textContent}.`;
+
+    render();
+  }catch(err){
+    status.style.display='block';
+    status.className='status bad';
+    status.textContent='Erreur : '+err.message;
+  }finally{
+    btn.disabled=false;
+    btn.textContent='Récupérer depuis Home Assistant';
+  }
 });
 
 render();
