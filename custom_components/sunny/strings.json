@@ -1,0 +1,99 @@
+{
+  "title": "Sunny",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuration Sunny",
+        "description": "Sélectionnez une entité météo (optionnelle) pour enrichir les données des capteurs d'ensoleillement.",
+        "data": {
+          "weather_entity": "Entité météo (optionnelle)"
+        }
+      },
+      "window": {
+        "title": "Ajouter une fenêtre ({count})",
+        "description": "Configurez les paramètres de la fenêtre et le store associé.",
+        "data": {
+          "name": "Nom de la fenêtre",
+          "cover_entity": "Store à associer",
+          "orientation": "Azimut de la façade (°)",
+          "width": "Largeur (m)",
+          "height": "Hauteur (m)",
+          "wall_thickness": "Épaisseur du mur (m)",
+          "screen_distance": "Distance du mur écran (m, 0 = désactivé)",
+          "screen_height": "Hauteur du mur écran (m)",
+          "altitude": "Hauteur au-dessus du sol (m)",
+          "latitude": "Latitude (optionnelle, défaut HA)",
+          "longitude": "Longitude (optionnelle, défaut HA)"
+        }
+      },
+      "finish": {
+        "title": "Terminé ?",
+        "description": "{count} fenêtre(s) configurée(s).",
+        "data": {
+          "add_another": "Ajouter une autre fenêtre"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gérer les fenêtres",
+        "description": "Sélectionnez une fenêtre à modifier, ajoutez-en une nouvelle, ou changez l'entité météo.",
+        "data": {
+          "action": "Action",
+          "window": "Fenêtre"
+        }
+      },
+      "edit_window": {
+        "title": "Modifier la fenêtre",
+        "data": {
+          "name": "Nom de la fenêtre",
+          "cover_entity": "Store à associer",
+          "orientation": "Azimut de la façade (°)",
+          "width": "Largeur (m)",
+          "height": "Hauteur (m)",
+          "wall_thickness": "Épaisseur du mur (m)",
+          "screen_distance": "Distance du mur écran (m)",
+          "screen_height": "Hauteur du mur écran (m)",
+          "altitude": "Hauteur au-dessus du sol (m)",
+          "latitude": "Latitude",
+          "longitude": "Longitude"
+        }
+      },
+      "add_window": {
+        "title": "Ajouter une fenêtre",
+        "data": {
+          "name": "Nom de la fenêtre",
+          "cover_entity": "Store à associer",
+          "orientation": "Azimut de la façade (°)",
+          "width": "Largeur (m)",
+          "height": "Hauteur (m)",
+          "wall_thickness": "Épaisseur du mur (m)",
+          "screen_distance": "Distance du mur écran (m)",
+          "screen_height": "Hauteur du mur écran (m)",
+          "altitude": "Hauteur au-dessus du sol (m)",
+          "latitude": "Latitude",
+          "longitude": "Longitude"
+        }
+      },
+      "weather": {
+        "title": "Entité météo",
+        "data": {
+          "weather_entity": "Entité météo (optionnelle)"
+        }
+      }
+    }
+  },
+  "selector": {
+    "action": {
+      "options": {
+        "edit": "Modifier",
+        "delete": "Supprimer",
+        "add": "Ajouter une fenêtre",
+        "weather": "Changer l'entité météo",
+        "done": "Terminé"
+      }
+    }
+  }
+}

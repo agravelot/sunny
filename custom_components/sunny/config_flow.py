@@ -1,0 +1,262 @@
+"""Configuration UI pour l'intégration Sunny."""
+
+from typing import Any
+
+import voluptuous as vol
+
+from homeassistant import config_entries
+from homeassistant.config_entries import OptionsFlow
+from homeassistant.core import callback
+from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
+)
+
+from .const import (
+    DOMAIN,
+    CONF_WEATHER_ENTITY,
+    CONF_WINDOWS,
+    CONF_WINDOW_NAME,
+    CONF_COVER_ENTITY,
+    CONF_ORIENTATION,
+    CONF_WIDTH,
+    CONF_HEIGHT,
+    CONF_WALL_THICKNESS,
+    CONF_SCREEN_DISTANCE,
+    CONF_SCREEN_HEIGHT,
+    CONF_ALTITUDE,
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    DEFAULT_NAME,
+    DEFAULT_ORIENTATION,
+    DEFAULT_WIDTH,
+    DEFAULT_HEIGHT,
+    DEFAULT_WALL_THICKNESS,
+    DEFAULT_SCREEN_DISTANCE,
+    DEFAULT_SCREEN_HEIGHT,
+    DEFAULT_ALTITUDE,
+)
+
+WINDOW_SCHEMA = vol.Schema({
+    vol.Required(CONF_WINDOW_NAME, default=DEFAULT_NAME): str,
+    vol.Required(CONF_COVER_ENTITY): EntitySelector(
+        EntitySelectorConfig(domain="cover")
+    ),
+    vol.Required(CONF_ORIENTATION, default=DEFAULT_ORIENTATION):
+        vol.All(vol.Coerce(float), vol.Range(min=0, max=359)),
+    vol.Required(CONF_WIDTH, default=DEFAULT_WIDTH):
+        vol.All(vol.Coerce(float), vol.Range(min=0.4, max=4.0)),
+    vol.Required(CONF_HEIGHT, default=DEFAULT_HEIGHT):
+        vol.All(vol.Coerce(float), vol.Range(min=0.4, max=3.0)),
+    vol.Required(CONF_WALL_THICKNESS, default=DEFAULT_WALL_THICKNESS):
+        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.8)),
+    vol.Optional(CONF_SCREEN_DISTANCE, default=DEFAULT_SCREEN_DISTANCE):
+        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=20.0)),
+    vol.Optional(CONF_SCREEN_HEIGHT, default=DEFAULT_SCREEN_HEIGHT):
+        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
+    vol.Required(CONF_ALTITUDE, default=DEFAULT_ALTITUDE):
+        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
+    vol.Optional(CONF_LATITUDE): vol.All(vol.Coerce(float), vol.Range(min=-66, max=66)),
+    vol.Optional(CONF_LONGITUDE): vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
+})
+
+
+def _build_weather_schema() -> vol.Schema:
+    return vol.Schema({
+        vol.Optional(CONF_WEATHER_ENTITY): EntitySelector(
+            EntitySelectorConfig(domain="weather")
+        ),
+    })
+
+
+class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Config flow pour Sunny — sélection météo puis ajout de fenêtres."""
+
+    VERSION = 1
+
+    def __init__(self) -> None:
+        self.data: dict[str, Any] = {CONF_WINDOWS: []}
+
+    async def async_step_user(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            self.data[CONF_WEATHER_ENTITY] = user_input.get(CONF_WEATHER_ENTITY, "")
+            return await self.async_step_window()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=_build_weather_schema(),
+        )
+
+    async def async_step_window(self, user_input: dict[str, Any] | None = None):
+        errors = {}
+
+        if user_input is not None:
+            lat = user_input.pop(CONF_LATITUDE, None)
+            lon = user_input.pop(CONF_LONGITUDE, None)
+            win: dict[str, Any] = dict(user_input)
+            if lat is not None:
+                win[CONF_LATITUDE] = lat
+            if lon is not None:
+                win[CONF_LONGITUDE] = lon
+            self.data[CONF_WINDOWS].append(win)
+            return await self.async_step_finish()
+
+        schema = WINDOW_SCHEMA
+        if self.data[CONF_WINDOWS]:
+            schema = schema.extend({
+                vol.Optional("__add_another", default=True): bool,
+            })
+
+        return self.async_show_form(
+            step_id="window",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "count": str(len(self.data[CONF_WINDOWS]) + 1),
+            },
+        )
+
+    async def async_step_finish(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            if user_input.get("add_another"):
+                return await self.async_step_window()
+            return self.async_create_entry(
+                title="Sunny",
+                data={CONF_WEATHER_ENTITY: self.data[CONF_WEATHER_ENTITY]},
+                options={CONF_WINDOWS: self.data[CONF_WINDOWS]},
+            )
+
+        return self.async_show_form(
+            step_id="finish",
+            data_schema=vol.Schema({
+                vol.Optional("add_another", default=False): bool,
+            }),
+            description_placeholders={
+                "count": str(len(self.data[CONF_WINDOWS])),
+            },
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> OptionsFlow:
+        return SunnyOptionsFlow(config_entry)
+
+
+class SunnyOptionsFlow(OptionsFlow):
+    """Options flow — éditer/ajouter/supprimer des fenêtres."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.entry = config_entry
+        self.data: dict[str, Any] = dict(config_entry.options)
+        if CONF_WINDOWS not in self.data:
+            self.data[CONF_WINDOWS] = []
+        self._editing: int | None = None
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            action = user_input.get("action")
+            window_name = user_input.get("window")
+
+            if action == "add":
+                return await self.async_step_add_window()
+            elif action == "edit" and window_name is not None:
+                self._editing = int(window_name)
+                return await self.async_step_edit_window()
+            elif action == "delete" and window_name is not None:
+                idx = int(window_name)
+                if 0 <= idx < len(self.data[CONF_WINDOWS]):
+                    self.data[CONF_WINDOWS].pop(idx)
+                return await self.async_step_init()
+            elif action == "weather":
+                return await self.async_step_weather()
+            elif action == "done":
+                return self.async_create_entry(
+                    data=self.entry.data,
+                    options=self.data,
+                )
+
+        options = [
+            {"label": f"{i+1}. {w.get(CONF_WINDOW_NAME, DEFAULT_NAME)}", "value": str(i)}
+            for i, w in enumerate(self.data[CONF_WINDOWS])
+        ]
+        options.append({"label": "+ Ajouter une fenêtre", "value": "add"})
+
+        schema = vol.Schema({
+            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "done"]),
+            vol.Optional("window"): vol.In({o["value"]: o["label"] for o in options}),
+        })
+
+        return self.async_show_form(step_id="init", data_schema=schema)
+
+    async def async_step_edit_window(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            self.data[CONF_WINDOWS][self._editing] = dict(user_input)
+            self._editing = None
+            return await self.async_step_init()
+
+        if self._editing is not None and self._editing < len(self.data[CONF_WINDOWS]):
+            current = self.data[CONF_WINDOWS][self._editing]
+        else:
+            current = {}
+
+        def _build_schema(with_defaults: dict) -> vol.Schema:
+            return vol.Schema({
+                vol.Required(CONF_WINDOW_NAME, default=with_defaults.get(CONF_WINDOW_NAME, DEFAULT_NAME)): str,
+                vol.Required(CONF_COVER_ENTITY, default=with_defaults.get(CONF_COVER_ENTITY, "")):
+                    EntitySelector(EntitySelectorConfig(domain="cover")),
+                vol.Required(CONF_ORIENTATION, default=with_defaults.get(CONF_ORIENTATION, DEFAULT_ORIENTATION)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0, max=359)),
+                vol.Required(CONF_WIDTH, default=with_defaults.get(CONF_WIDTH, DEFAULT_WIDTH)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.4, max=4.0)),
+                vol.Required(CONF_HEIGHT, default=with_defaults.get(CONF_HEIGHT, DEFAULT_HEIGHT)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.4, max=3.0)),
+                vol.Required(CONF_WALL_THICKNESS, default=with_defaults.get(CONF_WALL_THICKNESS, DEFAULT_WALL_THICKNESS)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.8)),
+                vol.Optional(CONF_SCREEN_DISTANCE, default=with_defaults.get(CONF_SCREEN_DISTANCE, DEFAULT_SCREEN_DISTANCE)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=20.0)),
+                vol.Optional(CONF_SCREEN_HEIGHT, default=with_defaults.get(CONF_SCREEN_HEIGHT, DEFAULT_SCREEN_HEIGHT)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
+                vol.Required(CONF_ALTITUDE, default=with_defaults.get(CONF_ALTITUDE, DEFAULT_ALTITUDE)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
+                vol.Optional(CONF_LATITUDE, default=with_defaults.get(CONF_LATITUDE)):
+                    vol.All(vol.Coerce(float), vol.Range(min=-66, max=66)),
+                vol.Optional(CONF_LONGITUDE, default=with_defaults.get(CONF_LONGITUDE)):
+                    vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
+            })
+
+        return self.async_show_form(
+            step_id="edit_window",
+            data_schema=_build_schema(current),
+        )
+
+    async def async_step_add_window(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            win = dict(user_input)
+            lat = win.pop(CONF_LATITUDE, None)
+            lon = win.pop(CONF_LONGITUDE, None)
+            if lat is not None:
+                win[CONF_LATITUDE] = lat
+            if lon is not None:
+                win[CONF_LONGITUDE] = lon
+            self.data[CONF_WINDOWS].append(win)
+            return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="add_window",
+            data_schema=WINDOW_SCHEMA,
+        )
+
+    async def async_step_weather(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            self.data[CONF_WEATHER_ENTITY] = user_input.get(CONF_WEATHER_ENTITY, "")
+            return await self.async_step_init()
+
+        current = self.data.get(CONF_WEATHER_ENTITY) or self.entry.data.get(CONF_WEATHER_ENTITY, "")
+        return self.async_show_form(
+            step_id="weather",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_WEATHER_ENTITY, default=current): EntitySelector(
+                    EntitySelectorConfig(domain="weather")
+                ),
+            }),
+        )

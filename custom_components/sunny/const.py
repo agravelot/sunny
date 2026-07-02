@@ -1,0 +1,29 @@
+"""Constantes pour l'intégration Sunny."""
+
+DOMAIN = "sunny"
+
+CONF_WEATHER_ENTITY = "weather_entity"
+CONF_WINDOWS = "windows"
+
+CONF_WINDOW_NAME = "name"
+CONF_COVER_ENTITY = "cover_entity"
+CONF_ORIENTATION = "orientation"
+CONF_WIDTH = "width"
+CONF_HEIGHT = "height"
+CONF_WALL_THICKNESS = "wall_thickness"
+CONF_SCREEN_DISTANCE = "screen_distance"
+CONF_SCREEN_HEIGHT = "screen_height"
+CONF_ALTITUDE = "altitude"
+CONF_LATITUDE = "latitude"
+CONF_LONGITUDE = "longitude"
+
+DEFAULT_NAME = "Fenêtre"
+DEFAULT_ORIENTATION = 180
+DEFAULT_WIDTH = 1.2
+DEFAULT_HEIGHT = 1.4
+DEFAULT_WALL_THICKNESS = 0.25
+DEFAULT_SCREEN_DISTANCE = 0.0
+DEFAULT_SCREEN_HEIGHT = 1.0
+DEFAULT_ALTITUDE = 10
+
+UPDATE_INTERVAL_MINUTES = 5
