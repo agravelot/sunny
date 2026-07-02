@@ -5,6 +5,7 @@
 <title>Simulateur d'ensoleillement de fenêtre</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   :root{
     --bg:#141a21;
@@ -180,6 +181,9 @@
   }
   .ha-btn:hover{opacity:0.85;}
   .ha-btn:disabled{opacity:0.4;cursor:not-allowed;}
+  #map{height:220px;width:100%;border-radius:6px;border:1px solid var(--wall-line);background:var(--panel-alt);}
+  .leaflet-container{font-family:'IBM Plex Sans',sans-serif;}
+  .leaflet-control-zoom a{background:var(--panel)!important;color:var(--text)!important;border-color:var(--wall-line)!important;}
 </style>
 </head>
 <body>
@@ -192,6 +196,11 @@
 
   <div class="layout">
     <div class="controls">
+      <div class="panel">
+        <h2>Carte</h2>
+        <div id="map"></div>
+        <div class="note" style="margin-top:6px;font-size:11px;">Déplacez le marqueur pour définir vos coordonnées.</div>
+      </div>
       <div class="panel">
         <h2>Position du soleil</h2>
         <div class="field">
@@ -315,7 +324,7 @@
     </div>
   </div>
 </div>
-
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const d2r=d=>d*Math.PI/180, r2d=r=>r*180/Math.PI;
@@ -581,7 +590,7 @@ function fmtHHMM(hour){
     $('v-d').textContent = parseFloat($('dscreen').value).toFixed(1);
     $('v-hm').textContent = parseFloat($('hmscreen').value).toFixed(1);
     $('v-orientc').textContent = parseFloat($('orientc').value).toFixed(0)+'°';
-    if(id==='lat'||id==='lon') saveGeo();
+    if(id==='lat'||id==='lon'){ saveGeo(); updateMapMarker(); }
     render();
   });
 });
@@ -680,6 +689,7 @@ $('ha-fetch').addEventListener('click', async ()=>{
       $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
       $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
       saveGeo();
+      updateMapMarker();
     }
 
     // set date to today
@@ -720,6 +730,35 @@ $('ha-fetch').addEventListener('click', async ()=>{
     btn.textContent='Récupérer depuis Home Assistant';
   }
 });
+
+// ---- OpenStreetMap ----
+let map, marker;
+function initMap(){
+  const lat=parseFloat($('lat').value);
+  const lon=parseFloat($('lon').value);
+  map=L.map('map',{attributionControl:false,zoomControl:true}).setView([lat,lon],6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19
+  }).addTo(map);
+  marker=L.marker([lat,lon],{draggable:true}).addTo(map);
+  marker.on('dragend',()=>{
+    const pos=marker.getLatLng();
+    $('lat').value=pos.lat.toFixed(2);
+    $('lon').value=pos.lng.toFixed(2);
+    $('v-lat').textContent=pos.lat.toFixed(2)+'°';
+    $('v-lon').textContent=pos.lng.toFixed(2)+'°';
+    saveGeo();
+    render();
+  });
+}
+function updateMapMarker(){
+  if(!map||!marker) return;
+  const lat=parseFloat($('lat').value);
+  const lon=parseFloat($('lon').value);
+  marker.setLatLng([lat,lon]);
+  map.setView([lat,lon],map.getZoom());
+}
+initMap();
 
 render();
 </script>
