@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Simulateur d'ensoleillement de fenêtre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#141a21;
+    --panel:#1b2530;
+    --panel-alt:#212c39;
+    --grid-line:#26323f;
+    --text:#ece8de;
+    --text-muted:#8b9aab;
+    --sun:#f2a65a;
+    --sun-strong:#ffcf8f;
+    --shadow-fill:#33414f;
+    --sky:#6fa8dc;
+    --alert:#e2725b;
+    --wall:#3a4655;
+    --wall-line:#4c5b6d;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0/28px 28px,
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0/28px 28px,
+      var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans', sans-serif;
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{margin-bottom:26px;}
+  header .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--sun);
+    margin-bottom:8px;
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size:30px;
+    margin:0 0 6px;
+    letter-spacing:-.01em;
+  }
+  header p{color:var(--text-muted);margin:0;font-size:14.5px;max-width:640px;line-height:1.5;}
+
+  .layout{
+    display:grid;
+    grid-template-columns:330px 1fr;
+    gap:20px;
+  }
+  @media (max-width:880px){ .layout{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--wall-line);
+    border-radius:10px;
+    padding:20px;
+  }
+  .panel + .panel{margin-top:20px;}
+  .panel h2{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.1em;
+    color:var(--sky);
+    margin:0 0 16px;
+  }
+
+  .field{margin-bottom:16px;}
+  .field label{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    color:var(--text-muted);
+    margin-bottom:6px;
+  }
+  .field label .val{
+    font-family:'IBM Plex Mono',monospace;
+    color:var(--sun-strong);
+    font-weight:500;
+  }
+  input[type=range]{
+    width:100%;
+    accent-color:var(--sun);
+    height:4px;
+  }
+  input[type=number], input[type=date], select{
+    width:100%;
+    background:var(--panel-alt);
+    border:1px solid var(--wall-line);
+    color:var(--text);
+    padding:8px 10px;
+    border-radius:6px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+  }
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .toggle-row span{font-size:13px;color:var(--text);}
+  .switch{
+    position:relative;width:40px;height:22px;
+    background:var(--wall-line);border-radius:20px;
+    cursor:pointer;flex-shrink:0;
+    transition:background .15s;
+  }
+  .switch.on{background:var(--sun);}
+  .switch::after{
+    content:'';position:absolute;top:2px;left:2px;
+    width:18px;height:18px;border-radius:50%;
+    background:var(--bg);transition:transform .15s;
+  }
+  .switch.on::after{transform:translateX(18px);}
+
+  .screen-fields{display:none;}
+  .screen-fields.show{display:block;}
+
+  .viz-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+  }
+  @media (max-width:700px){ .viz-grid{grid-template-columns:1fr;} }
+  .viz-card h3{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:12.5px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--text-muted);
+    margin:0 0 10px;
+  }
+  svg{width:100%;height:auto;display:block;background:var(--panel-alt);border-radius:8px;border:1px solid var(--wall-line);}
+
+  .status{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    padding:10px 14px;
+    border-radius:7px;
+    margin-bottom:18px;
+    border:1px solid;
+  }
+  .status.ok{background:rgba(242,166,90,0.08);border-color:var(--sun);color:var(--sun-strong);}
+  .status.bad{background:rgba(226,114,91,0.1);border-color:var(--alert);color:var(--alert);}
+
+  .metrics{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:12px;
+    margin-top:18px;
+  }
+  .metric{
+    background:var(--panel-alt);
+    border:1px solid var(--wall-line);
+    border-radius:8px;
+    padding:12px 14px;
+  }
+  .metric .label{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+  .metric .value{font-family:'IBM Plex Mono',monospace;font-size:19px;color:var(--text);font-weight:500;}
+  .metric .value small{font-size:12px;color:var(--text-muted);font-weight:400;}
+  .metric.highlight .value{color:var(--sun-strong);}
+
+  .note{font-size:12px;color:var(--text-muted);margin-top:16px;line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Géométrie solaire &middot; Bâtiment</div>
+    <h1>Simulateur d'ensoleillement de fenêtre</h1>
+    <p>Calcule la part de la fenêtre directement éclairée par le soleil, en tenant compte de l'orientation, de l'épaisseur du mur (embrasure) et d'un mur écran extérieur.</p>
+  </header>
+
+  <div class="layout">
+    <div class="controls">
+      <div class="panel">
+        <h2>Position du soleil</h2>
+        <div class="field">
+          <label>Latitude <span class="val" id="v-lat">48.85°</span></label>
+          <input type="range" id="lat" min="-66" max="66" step="0.1" value="48.85">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Date</label>
+            <input type="date" id="date" value="2026-07-02">
+          </div>
+          <div class="field">
+            <label>Heure solaire <span class="val" id="v-hour">14:00</span></label>
+            <input type="range" id="hour" min="4" max="21" step="0.25" value="14">
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Fenêtre & mur</h2>
+        <div class="field">
+          <label>Orientation de la façade (normale sortante)</label>
+          <select id="orient">
+            <option value="0">Nord (0°)</option>
+            <option value="45">Nord-Est (45°)</option>
+            <option value="90">Est (90°)</option>
+            <option value="135">Sud-Est (135°)</option>
+            <option value="180" selected>Sud (180°)</option>
+            <option value="225">Sud-Ouest (225°)</option>
+            <option value="270">Ouest (270°)</option>
+            <option value="315">Nord-Ouest (315°)</option>
+            <option value="custom">Personnalisé…</option>
+          </select>
+        </div>
+        <div class="field" id="orient-custom-field" style="display:none;">
+          <label>Azimut personnalisé <span class="val" id="v-orientc">180°</span></label>
+          <input type="range" id="orientc" min="0" max="359" step="1" value="180">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Largeur (m) <span class="val" id="v-w">1.20</span></label>
+            <input type="range" id="wwin" min="0.4" max="4" step="0.05" value="1.2">
+          </div>
+          <div class="field">
+            <label>Hauteur (m) <span class="val" id="v-h">1.40</span></label>
+            <input type="range" id="hwin" min="0.4" max="3" step="0.05" value="1.4">
+          </div>
+        </div>
+        <div class="field">
+          <label>Épaisseur du mur / embrasure (m) <span class="val" id="v-e">0.30</span></label>
+          <input type="range" id="ewall" min="0" max="0.8" step="0.02" value="0.3">
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="toggle-row">
+          <span>Mur écran devant la fenêtre</span>
+          <div class="switch" id="screen-toggle"></div>
+        </div>
+        <div class="screen-fields" id="screen-fields">
+          <div class="row2">
+            <div class="field">
+              <label>Distance D (m) <span class="val" id="v-d">4.0</span></label>
+              <input type="range" id="dscreen" min="0.5" max="20" step="0.1" value="4">
+            </div>
+            <div class="field">
+              <label>Hauteur Hm (m) <span class="val" id="v-hm">2.5</span></label>
+              <input type="range" id="hmscreen" min="0" max="15" step="0.1" value="2.5">
+            </div>
+          </div>
+          <p class="note">Hauteur du sommet de l'écran mesurée depuis le bas de la fenêtre. Distance mesurée horizontalement depuis le nu extérieur du mur.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="results">
+      <div class="panel" id="status-panel">
+        <div id="status" class="status ok">—</div>
+
+        <div class="viz-grid">
+          <div class="viz-card">
+            <h3>Vue en plan</h3>
+            <svg id="svg-plan" viewBox="0 0 380 260"></svg>
+          </div>
+          <div class="viz-card">
+            <h3>Coupe verticale (façade)</h3>
+            <svg id="svg-section" viewBox="0 0 380 260"></svg>
+          </div>
+        </div>
+
+        <div class="metrics" id="metrics"></div>
+
+        <p class="note">Modèle simplifié : altitude et azimut solaires calculés à partir de la déclinaison terrestre (sans réfraction atmosphérique, ni équation du temps — "heure solaire" ≈ heure au méridien local). L'angle de profil hp régit les ombres du linteau et de l'écran ; l'écart d'azimut γ régit les ombres des tableaux latéraux.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const d2r=d=>d*Math.PI/180, r2d=r=>r*180/Math.PI;
+
+function dayOfYear(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  const start=new Date(d.getFullYear(),0,0);
+  return Math.floor((d-start)/86400000);
+}
+
+function sunPosition(latDeg,N,solarHour){
+  const lat=d2r(latDeg);
+  const decl=d2r(23.45*Math.sin(d2r(360/365*(284+N))));
+  const H=d2r(15*(solarHour-12));
+  let sinh=Math.sin(lat)*Math.sin(decl)+Math.cos(lat)*Math.cos(decl)*Math.cos(H);
+  sinh=Math.max(-1,Math.min(1,sinh));
+  const h=Math.asin(sinh);
+  const cosh=Math.max(Math.cos(h),1e-6);
+  let cosAzs=(sinh*Math.sin(lat)-Math.sin(decl))/(cosh*Math.cos(lat));
+  cosAzs=Math.max(-1,Math.min(1,cosAzs));
+  let azs=Math.acos(cosAzs);
+  if(H<0) azs=-azs;
+  let As=r2d(azs)+180;
+  As=((As%360)+360)%360;
+  return {h:r2d(h), As:As};
+}
+
+function normAngle180(a){ return ((a+180)%360+360)%360-180; }
+
+function computeAll(){
+  const lat=parseFloat($('lat').value);
+  const dateStr=$('date').value;
+  const hour=parseFloat($('hour').value);
+  const N=dayOfYear(dateStr);
+  const {h,As}=sunPosition(lat,N,hour);
+
+  let An = $('orient').value==='custom' ? parseFloat($('orientc').value) : parseFloat($('orient').value);
+
+  const W=parseFloat($('wwin').value);
+  const Hw=parseFloat($('hwin').value);
+  const e=parseFloat($('ewall').value);
+  const useScreen = $('screen-toggle').classList.contains('on');
+  const D=parseFloat($('dscreen').value);
+  const Hm=parseFloat($('hmscreen').value);
+
+  let gamma=normAngle180(As-An);
+  const behind = h<=0 || Math.abs(gamma)>=90;
+
+  let theta=null, hp=null, dLat=0, dVert=0, Wutile=W, Hutile=Hw, yOmbre=0, screenBlocksAll=false;
+
+  if(!behind){
+    const hRad=d2r(h), gRad=d2r(gamma);
+    const cosG=Math.cos(gRad);
+    theta=r2d(Math.acos(Math.max(-1,Math.min(1,Math.cos(hRad)*cosG))));
+    const tanhp=Math.tan(hRad)/cosG;
+    hp=r2d(Math.atan(tanhp));
+    dLat=Math.max(0, e*Math.tan(Math.abs(gRad)));
+    Wutile=Math.max(0, W-dLat);
+    dVert=Math.max(0, e*Math.tan(d2r(Math.max(hp,0))));
+    Hutile=Math.max(0, Hw-dVert);
+
+    if(useScreen){
+      const hpLimit=r2d(Math.atan(Hm/Math.max(D,0.001)));
+      if(hp<hpLimit){ screenBlocksAll=true; yOmbre=Hw; }
+      else{
+        yOmbre=Hm - D*Math.tan(d2r(hp));
+        yOmbre=Math.max(0, Math.min(Hw, yOmbre));
+      }
+    }
+  }
+
+  const litHeight = behind ? 0 : Math.max(0, Hutile - yOmbre);
+  const litWidth = behind ? 0 : Wutile;
+  const area=W*Hw;
+  const litArea = litWidth*litHeight;
+  const pct = area>0 ? (litArea/area*100) : 0;
+
+  return {lat,N,hour,h,As,An,W,Hw,e,useScreen,D,Hm,gamma,behind,theta,hp,dLat,dVert,Wutile,Hutile,yOmbre,screenBlocksAll,litHeight,litWidth,pct};
+}
+
+function fmt(v,d=1){ return isFinite(v)? v.toFixed(d) : '—'; }
+
+function renderMetrics(r){
+  const el=$('metrics');
+  const rows=[
+    ['Altitude solaire h', fmt(r.h)+'°'],
+    ['Azimut solaire As', fmt(r.As)+'°'],
+    ['Écart azimutal γ', fmt(r.gamma)+'°'],
+    ['Angle de profil hp', r.behind? '—' : fmt(r.hp)+'°'],
+    ["Angle d'incidence θ", r.behind? '—' : fmt(r.theta)+'°'],
+    ['Ombre tableau lat.', fmt(r.dLat,2)+' m'],
+    ['Ombre linteau', fmt(r.dVert,2)+' m'],
+    ['Surface éclairée', fmt(r.pct,0)+' %'],
+  ];
+  el.innerHTML=rows.map(([label,val],i)=>`
+    <div class="metric ${i===rows.length-1?'highlight':''}">
+      <div class="label">${label}</div>
+      <div class="value">${val}</div>
+    </div>`).join('');
+}
+
+function renderStatus(r){
+  const el=$('status');
+  if(r.behind){
+    el.className='status bad';
+    el.textContent = r.h<=0
+      ? "Soleil sous l'horizon — aucune lumière directe."
+      : "Le soleil est derrière le plan de façade (|γ| ≥ 90°) — aucune lumière directe.";
+  } else if(r.screenBlocksAll){
+    el.className='status bad';
+    el.textContent = 'Le mur écran masque entièrement le rayon direct à cette heure.';
+  } else if(r.pct<1){
+    el.className='status bad';
+    el.textContent = 'Fenêtre quasi entièrement à l\'ombre (embrasure et/ou écran).';
+  } else {
+    el.className='status ok';
+    el.textContent = `Rayon direct présent — ${fmt(r.pct,0)}% de la surface vitrée éclairée.`;
+  }
+}
+
+// ---------- Vue en plan ----------
+function renderPlan(r){
+  const svg=$('svg-plan');
+  const cx=190, wallY=170;
+  const scale = Math.min(60, 260/(r.W+2*r.e+2));
+  const wallLen = Math.max(220, (r.W+1.4)*scale);
+  const winPx = r.W*scale;
+  const ePx = Math.max(r.e*scale, r.e>0?4:0);
+  const wallX0 = cx - wallLen/2;
+  const winX0 = cx - winPx/2;
+
+  let parts=[];
+  // wall band (in plan, thickness = e, drawn vertically)
+  parts.push(`<rect x="${wallX0}" y="${wallY}" width="${wallLen}" height="${Math.max(ePx,10)}" fill="var(--wall)" stroke="var(--wall-line)"/>`);
+  // window opening (cut in wall)
+  parts.push(`<rect x="${winX0}" y="${wallY}" width="${winPx}" height="${Math.max(ePx,10)}" fill="var(--panel-alt)"/>`);
+  // jamb shadow (lateral)
+  if(!r.behind && r.dLat>0){
+    const shadowPx = Math.min(winPx, r.dLat*scale);
+    const fromRight = r.gamma<0; // sun on which side -> shadow falls on opposite jamb
+    const sx = fromRight ? winX0+winPx-shadowPx : winX0;
+    parts.push(`<rect x="${sx}" y="${wallY}" width="${shadowPx}" height="${Math.max(ePx,10)}" fill="var(--shadow-fill)" opacity="0.85"/>`);
+  }
+  // outline
+  parts.push(`<rect x="${wallX0}" y="${wallY}" width="${wallLen}" height="${Math.max(ePx,10)}" fill="none" stroke="var(--wall-line)"/>`);
+
+  // normal (outward) arrow, pointing up (exterior is above wall)
+  parts.push(`<line x1="${cx}" y1="${wallY}" x2="${cx}" y2="${wallY-70}" stroke="var(--text-muted)" stroke-dasharray="3,3"/>`);
+  parts.push(`<text x="${cx+6}" y="${wallY-62}" fill="var(--text-muted)" font-size="10" font-family="IBM Plex Mono">normale</text>`);
+
+  // sun ray in plan (direction from gamma), only if not behind
+  if(!r.behind){
+    const ang = d2r(r.gamma); // 0 = along normal
+    const rayLen=90;
+    const sx = cx + Math.sin(ang)*rayLen;
+    const sy = (wallY-Math.max(ePx,10)/2) - Math.cos(ang)*rayLen;
+    parts.push(`<line x1="${sx}" y1="${sy}" x2="${cx}" y2="${wallY-Math.max(ePx,10)/2}" stroke="var(--sun)" stroke-width="2" marker-end="url(#arrowplan)"/>`);
+    parts.push(`<circle cx="${sx}" cy="${sy}" r="7" fill="var(--sun)"/>`);
+  }
+
+  // external screen wall in plan
+  if(r.useScreen){
+    const dPx = Math.min(90, r.D*scale*0.5+10);
+    const scrY = wallY - Math.max(ePx,10)/2 - dPx - 30;
+    parts.push(`<rect x="${wallX0-10}" y="${Math.max(scrY,10)}" width="${wallLen+20}" height="8" fill="${r.screenBlocksAll?'var(--alert)':'var(--sky)'}" opacity="0.8"/>`);
+    parts.push(`<text x="${wallX0-10}" y="${Math.max(scrY,10)-6}" fill="var(--sky)" font-size="10" font-family="IBM Plex Mono">écran D=${fmt(r.D,1)}m</text>`);
+  }
+
+  parts.push(`<text x="${wallX0}" y="${wallY+Math.max(ePx,10)+18}" fill="var(--text-muted)" font-size="10" font-family="IBM Plex Mono">e = ${fmt(r.e,2)} m</text>`);
+  parts.push(`<text x="${winX0}" y="${wallY-8}" fill="var(--text-muted)" font-size="10" font-family="IBM Plex Mono">W = ${fmt(r.W,2)} m</text>`);
+
+  svg.innerHTML = `<defs><marker id="arrowplan" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--sun)"/></marker></defs>` + parts.join('');
+}
+
+// ---------- Coupe verticale ----------
+function renderSection(r){
+  const svg=$('svg-section');
+  const groundY=230;
+  const scale = Math.min(80, 170/(r.Hw+1.5));
+  const winPxH = r.Hw*scale;
+  const winPxW = Math.min(180, r.W*scale*1.2);
+  const cx=140;
+  const sillY = groundY - 30;
+  const headY = sillY - winPxH;
+  const winX0 = cx - winPxW/2;
+
+  let parts=[];
+  // ground
+  parts.push(`<line x1="20" y1="${groundY}" x2="360" y2="${groundY}" stroke="var(--wall-line)"/>`);
+  // wall band around window (elevation face)
+  const wallPad=26;
+  parts.push(`<rect x="${winX0-wallPad}" y="${headY-wallPad}" width="${winPxW+wallPad*2}" height="${winPxH+wallPad*2}" fill="var(--wall)" stroke="var(--wall-line)"/>`);
+
+  // window base rect
+  parts.push(`<rect x="${winX0}" y="${headY}" width="${winPxW}" height="${winPxH}" fill="var(--shadow-fill)" stroke="var(--wall-line)"/>`);
+
+  if(!r.behind && r.litHeight>0){
+    const litPx = r.litHeight*scale;
+    const litY = sillY - (r.yOmbre*scale) - litPx;
+    parts.push(`<rect x="${winX0}" y="${Math.max(litY,headY)}" width="${winPxW}" height="${litPx}" fill="var(--sun)" opacity="0.85"/>`);
+  }
+
+  // lintel shadow band (top)
+  if(!r.behind && r.dVert>0){
+    const bandPx=Math.min(winPxH, r.dVert*scale);
+    parts.push(`<rect x="${winX0}" y="${headY}" width="${winPxW}" height="${bandPx}" fill="var(--shadow-fill)" opacity="0.9"/>`);
+  }
+
+  // sun ray (profile angle) if visible
+  if(!r.behind){
+    const ang=d2r(Math.max(Math.min(r.hp,89),-10));
+    const rayLen=80;
+    const ex=winX0+winPxW*0.75, ey=headY+winPxH*0.3;
+    const sx=ex - Math.cos(ang)*rayLen, sy=ey - Math.sin(ang)*rayLen;
+    parts.push(`<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="var(--sun)" stroke-width="2" marker-end="url(#arrowsec)"/>`);
+  }
+
+  // external screen wall silhouette
+  if(r.useScreen){
+    const scrPxH=Math.min(180, r.Hm*scale);
+    const scrX = winX0+winPxW+40;
+    parts.push(`<rect x="${scrX}" y="${groundY-scrPxH}" width="14" height="${scrPxH}" fill="${r.screenBlocksAll?'var(--alert)':'var(--sky)'}" opacity="0.85"/>`);
+    parts.push(`<text x="${scrX-4}" y="${groundY-scrPxH-6}" fill="var(--sky)" font-size="10" font-family="IBM Plex Mono">Hm=${fmt(r.Hm,1)}m</text>`);
+  }
+
+  parts.push(`<text x="${winX0}" y="${headY-10}" fill="var(--text-muted)" font-size="10" font-family="IBM Plex Mono">H = ${fmt(r.Hw,2)} m</text>`);
+
+  svg.innerHTML = `<defs><marker id="arrowsec" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--sun)"/></marker></defs>` + parts.join('');
+}
+
+function render(){
+  const r=computeAll();
+  renderStatus(r);
+  renderMetrics(r);
+  renderPlan(r);
+  renderSection(r);
+}
+
+// ---- wiring ----
+['lat','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc'].forEach(id=>{
+  $(id).addEventListener('input', ()=>{
+    $('v-lat').textContent = parseFloat($('lat').value).toFixed(2)+'°';
+    const hh=parseFloat($('hour').value);
+    const hFloor=Math.floor(hh), hMin=Math.round((hh-hFloor)*60);
+    $('v-hour').textContent = String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
+    $('v-w').textContent = parseFloat($('wwin').value).toFixed(2);
+    $('v-h').textContent = parseFloat($('hwin').value).toFixed(2);
+    $('v-e').textContent = parseFloat($('ewall').value).toFixed(2);
+    $('v-d').textContent = parseFloat($('dscreen').value).toFixed(1);
+    $('v-hm').textContent = parseFloat($('hmscreen').value).toFixed(1);
+    $('v-orientc').textContent = parseFloat($('orientc').value).toFixed(0)+'°';
+    render();
+  });
+});
+$('date').addEventListener('input', render);
+$('orient').addEventListener('change', ()=>{
+  $('orient-custom-field').style.display = $('orient').value==='custom' ? 'block':'none';
+  render();
+});
+$('screen-toggle').addEventListener('click', ()=>{
+  $('screen-toggle').classList.toggle('on');
+  $('screen-fields').classList.toggle('show');
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
