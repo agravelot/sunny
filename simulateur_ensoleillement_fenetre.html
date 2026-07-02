@@ -258,25 +258,25 @@
           </div>
         </div>
         <div class="field">
-          <label>Épaisseur du mur / embrasure (m) <span class="val" id="v-e">0.30</span></label>
-          <input type="range" id="ewall" min="0" max="0.8" step="0.02" value="0.3">
+          <label>Épaisseur du mur / embrasure (m) <span class="val" id="v-e">0.25</span></label>
+          <input type="range" id="ewall" min="0" max="0.8" step="0.02" value="0.25">
         </div>
       </div>
 
       <div class="panel">
         <div class="toggle-row">
           <span>Mur écran devant la fenêtre</span>
-          <div class="switch" id="screen-toggle"></div>
+          <div class="switch on" id="screen-toggle"></div>
         </div>
-        <div class="screen-fields" id="screen-fields">
+        <div class="screen-fields show" id="screen-fields">
           <div class="row2">
             <div class="field">
-              <label>Distance D (m) <span class="val" id="v-d">4.0</span></label>
-              <input type="range" id="dscreen" min="0.5" max="20" step="0.1" value="4">
+              <label>Distance D (m) <span class="val" id="v-d">1.63</span></label>
+              <input type="range" id="dscreen" min="0.5" max="20" step="0.01" value="1.63">
             </div>
             <div class="field">
-              <label>Hauteur Hm (m) <span class="val" id="v-hm">2.5</span></label>
-              <input type="range" id="hmscreen" min="0" max="15" step="0.1" value="2.5">
+              <label>Hauteur Hm (m) <span class="val" id="v-hm">1.0</span></label>
+              <input type="range" id="hmscreen" min="0" max="15" step="0.1" value="1.0">
             </div>
           </div>
           <p class="note">Hauteur du sommet de l'écran mesurée depuis le bas de la fenêtre. Distance mesurée horizontalement depuis le nu extérieur du mur.</p>
@@ -521,13 +521,23 @@ function renderSection(r){
   if(!r.behind && r.litHeight>0){
     const litPx = r.litHeight*scale;
     const litY = sillY - (r.yOmbre*scale) - litPx;
-    parts.push(`<rect x="${winX0}" y="${Math.max(litY,headY)}" width="${winPxW}" height="${litPx}" fill="var(--sun)" opacity="0.85"/>`);
+    const dLatPx = r.W>0 ? (r.dLat/r.W)*winPxW : 0;
+    const litX = r.gamma>0 ? winX0 : winX0+dLatPx;
+    const litW = winPxW - dLatPx;
+    parts.push(`<rect x="${litX}" y="${Math.max(litY,headY)}" width="${litW}" height="${litPx}" fill="var(--sun)" opacity="0.85"/>`);
   }
 
   // lintel shadow band (top)
   if(!r.behind && r.dVert>0){
     const bandPx=Math.min(winPxH, r.dVert*scale);
     parts.push(`<rect x="${winX0}" y="${headY}" width="${winPxW}" height="${bandPx}" fill="var(--shadow-fill)" opacity="0.9"/>`);
+  }
+
+  // lateral (jamb) shadow band
+  if(!r.behind && r.dLat>0){
+    const dLatPx = r.W>0 ? (r.dLat/r.W)*winPxW : 0;
+    const shadowX = r.gamma>0 ? winX0+winPxW-dLatPx : winX0;
+    parts.push(`<rect x="${shadowX}" y="${headY}" width="${dLatPx}" height="${winPxH}" fill="var(--shadow-fill)" opacity="0.85"/>`);
   }
 
   // sun ray (profile angle) if visible
