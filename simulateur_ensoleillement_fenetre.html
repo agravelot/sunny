@@ -464,7 +464,7 @@ function renderPlan(r){
   // jamb shadow (lateral)
   if(!r.behind && r.dLat>0){
     const shadowPx = Math.min(winPx, r.dLat*scale);
-    const fromRight = r.gamma<0; // sun on which side -> shadow falls on opposite jamb
+    const fromRight = r.gamma>0;
     const sx = fromRight ? winX0+winPx-shadowPx : winX0;
     parts.push(`<rect x="${sx}" y="${wallY}" width="${shadowPx}" height="${Math.max(ePx,10)}" fill="var(--shadow-fill)" opacity="0.85"/>`);
   }
@@ -536,9 +536,10 @@ function renderSection(r){
   // sun ray (profile angle) if visible
   if(!r.behind){
     const ang=d2r(Math.max(Math.min(r.hp,89),-10));
-    const rayLen=80;
+    const rayLen=100;
     const ex=winX0+winPxW*0.75, ey=headY+winPxH*0.3;
-    const sx=ex - Math.cos(ang)*rayLen, sy=ey - Math.sin(ang)*rayLen;
+    const signX=r.gamma>=0?1:-1;
+    const sx=ex + signX*Math.cos(ang)*rayLen, sy=ey - Math.sin(ang)*rayLen;
     parts.push(`<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="var(--sun)" stroke-width="2" marker-end="url(#arrowsec)"/>`);
   }
 
