@@ -386,14 +386,11 @@ function computeAll(){
     dVert=Math.max(0, e*Math.tan(d2r(Math.max(hp,0))));
     Hutile=Math.max(0, Hw-dVert);
 
-    if(useScreen){
-      const hpLimit=r2d(Math.atan(Hm/Math.max(D,0.001)));
-      if(hp<hpLimit){ screenBlocksAll=true; yOmbre=Hw; }
-      else{
+if(useScreen){
         yOmbre=Hm - D*Math.tan(d2r(hp));
         yOmbre=Math.max(0, Math.min(Hw, yOmbre));
+        if(yOmbre>=Hw) screenBlocksAll=true;
       }
-    }
   }
 
   const litHeight = behind ? 0 : Math.max(0, Hutile - yOmbre);
