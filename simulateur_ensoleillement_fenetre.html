@@ -211,6 +211,10 @@
           <label>Longitude <span class="val" id="v-lon">2.35°</span></label>
           <input type="range" id="lon" min="-180" max="180" step="0.05" value="2.35">
         </div>
+        <div class="field">
+          <label>Hauteur de la fenêtre au-dessus du sol <span class="val" id="v-alt">10 m</span></label>
+          <input type="range" id="altitude" min="0" max="500" step="1" value="10">
+        </div>
         <div class="row2">
           <div class="field">
             <label>Date</label>
@@ -369,9 +373,12 @@ function computeAll(){
   const useScreen = $('screen-toggle').classList.contains('on');
   const D=parseFloat($('dscreen').value);
   const Hm=parseFloat($('hmscreen').value);
+  const altitude=parseFloat($('altitude').value);
+
+  const dip=altitude>0 ? r2d(Math.acos(6371/(6371+altitude/1000))) : 0;
 
   let gamma=normAngle180(As-An);
-  const behind = h<=0 || Math.abs(gamma)>=90;
+  const behind = h<=-dip || Math.abs(gamma)>=90;
 
   let theta=null, hp=null, dLat=0, dVert=0, Wutile=W, Hutile=Hw, yOmbre=0, screenBlocksAll=false;
 
@@ -399,7 +406,7 @@ if(useScreen){
   const litArea = litWidth*litHeight;
   const pct = area>0 ? (litArea/area*100) : 0;
 
-  return {lat,N,hour,h,As,An,W,Hw,e,useScreen,D,Hm,gamma,behind,theta,hp,dLat,dVert,Wutile,Hutile,yOmbre,screenBlocksAll,litHeight,litWidth,pct};
+  return {lat,N,hour,h,As,An,W,Hw,e,useScreen,D,Hm,altitude,dip,gamma,behind,theta,hp,dLat,dVert,Wutile,Hutile,yOmbre,screenBlocksAll,litHeight,litWidth,pct};
 }
 
 function fmt(v,d=1){ return isFinite(v)? v.toFixed(d) : '—'; }
@@ -427,7 +434,7 @@ function renderStatus(r){
   const el=$('status');
   if(r.behind){
     el.className='status bad';
-    el.textContent = r.h<=0
+    el.textContent = r.h<=-r.dip
       ? "Soleil sous l'horizon — aucune lumière directe."
       : "Le soleil est derrière le plan de façade (|γ| ≥ 90°) — aucune lumière directe.";
   } else if(r.screenBlocksAll){
@@ -589,10 +596,11 @@ function fmtHHMM(hour){
   const hFloor=Math.floor(hour), hMin=Math.round((hour-hFloor)*60);
   return String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
 }
-['lat','lon','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc'].forEach(id=>{
+['lat','lon','altitude','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc'].forEach(id=>{
   $(id).addEventListener('input', ()=>{
     $('v-lat').textContent = parseFloat($('lat').value).toFixed(2)+'°';
     $('v-lon').textContent = parseFloat($('lon').value).toFixed(2)+'°';
+    $('v-alt').textContent = parseInt($('altitude').value)+' m';
     $('v-hour').textContent = fmtHHMM(parseFloat($('hour').value));
     $('v-w').textContent = parseFloat($('wwin').value).toFixed(2);
     $('v-h').textContent = parseFloat($('hwin').value).toFixed(2);
@@ -642,16 +650,20 @@ function saveGeo(){
   try{
     localStorage.setItem('geo_lat',$('lat').value);
     localStorage.setItem('geo_lon',$('lon').value);
+    localStorage.setItem('geo_alt',$('altitude').value);
   }catch(e){}
 }
 function loadGeo(){
   try{
     const latVal=localStorage.getItem('geo_lat');
     const lonVal=localStorage.getItem('geo_lon');
+    const altVal=localStorage.getItem('geo_alt');
     if(latVal!=null) $('lat').value=latVal;
     if(lonVal!=null) $('lon').value=lonVal;
+    if(altVal!=null) $('altitude').value=altVal;
     $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
     $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
+    $('v-alt').textContent=parseInt($('altitude').value)+' m';
   }catch(e){}
 }
 loadGeo();
@@ -678,8 +690,9 @@ $('ha-fetch').addEventListener('click', async ()=>{
 
   try{
     const headers={'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};
-    const [sunRes,cfgRes]=await Promise.all([
+    const [sunRes,zoneRes,cfgRes]=await Promise.all([
       fetch(`${url}/api/states/${encodeURIComponent(entity)}`,{headers}),
+      fetch(`${url}/api/states/zone.home`,{headers}),
       fetch(`${url}/api/config`,{headers})
     ]);
     if(!sunRes.ok){
@@ -691,16 +704,23 @@ $('ha-fetch').addEventListener('click', async ()=>{
     const haElevation=att.elevation;
     const haAzimuth=att.azimuth;
 
-    // fetch config for geolocation
-    if(cfgRes.ok){
+    // fetch geolocation from zone.home, fallback to /api/config
+    let geoSet=false;
+    if(zoneRes.ok){
+      const zone=await zoneRes.json();
+      const za=zone.attributes||{};
+      if(za.latitude!=null){ $('lat').value=za.latitude; geoSet=true; }
+      if(za.longitude!=null){ $('lon').value=za.longitude; geoSet=true; }
+    }
+    if(!geoSet && cfgRes.ok){
       const cfg=await cfgRes.json();
       if(cfg.latitude!=null) $('lat').value=cfg.latitude;
       if(cfg.longitude!=null) $('lon').value=cfg.longitude;
-      $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
-      $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
-      saveGeo();
-      updateMapMarker();
     }
+    $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
+    $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
+    saveGeo();
+    updateMapMarker();
 
     // set date to today
     const today=new Date();
