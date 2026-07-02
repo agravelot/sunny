@@ -198,6 +198,10 @@
           <label>Latitude <span class="val" id="v-lat">48.85°</span></label>
           <input type="range" id="lat" min="-66" max="66" step="0.1" value="48.85">
         </div>
+        <div class="field">
+          <label>Longitude <span class="val" id="v-lon">2.35°</span></label>
+          <input type="range" id="lon" min="-180" max="180" step="0.05" value="2.35">
+        </div>
         <div class="row2">
           <div class="field">
             <label>Date</label>
@@ -207,6 +211,10 @@
             <label>Heure solaire <span class="val" id="v-hour">14:00</span></label>
             <input type="range" id="hour" min="4" max="21" step="0.25" value="14">
           </div>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Heure locale estimée <span class="val" id="v-localtime">—</span></label>
+          <div class="note" style="margin-top:0;font-size:11px;">Déduite de l'heure solaire, la longitude et le fuseau horaire (UTC+1/+2).</div>
         </div>
       </div>
 
@@ -544,15 +552,29 @@ function render(){
   renderMetrics(r);
   renderPlan(r);
   renderSection(r);
+  // estimate local time from solar hour + longitude + timezone
+  const lonDeg=parseFloat($('lon').value);
+  const solarHour=parseFloat($('hour').value);
+  const dateStr=$('date').value;
+  const jan=new Date(dateStr+'T00:00:00');
+  const jul=jan.getFullYear()===new Date().getFullYear() ? new Date() : jan;
+  const tzOff=-jul.getTimezoneOffset()/60;
+  const tzMeridian=tzOff*15;
+  const eotEq=(lonDeg-tzMeridian)/15;
+  const localHour=((solarHour+eotEq)%24+24)%24;
+  $('v-localtime').textContent = fmtHHMM(localHour)+' (UTC'+(tzOff>=0?'+':'')+tzOff.toFixed(0)+')';
 }
 
 // ---- wiring ----
-['lat','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc'].forEach(id=>{
+function fmtHHMM(hour){
+  const hFloor=Math.floor(hour), hMin=Math.round((hour-hFloor)*60);
+  return String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
+}
+['lat','lon','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc'].forEach(id=>{
   $(id).addEventListener('input', ()=>{
     $('v-lat').textContent = parseFloat($('lat').value).toFixed(2)+'°';
-    const hh=parseFloat($('hour').value);
-    const hFloor=Math.floor(hh), hMin=Math.round((hh-hFloor)*60);
-    $('v-hour').textContent = String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
+    $('v-lon').textContent = parseFloat($('lon').value).toFixed(2)+'°';
+    $('v-hour').textContent = fmtHHMM(parseFloat($('hour').value));
     $('v-w').textContent = parseFloat($('wwin').value).toFixed(2);
     $('v-h').textContent = parseFloat($('hwin').value).toFixed(2);
     $('v-e').textContent = parseFloat($('ewall').value).toFixed(2);
@@ -617,17 +639,28 @@ $('ha-fetch').addEventListener('click', async ()=>{
   status.style.display='none';
 
   try{
-    const res=await fetch(`${url}/api/states/${encodeURIComponent(entity)}`,{
-      headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'}
-    });
-    if(!res.ok){
-      const errText=await res.text().catch(()=>'');
-      throw new Error(errText || `HTTP ${res.status}`);
+    const headers={'Authorization':`Bearer ${token}`,'Content-Type':'application/json'};
+    const [sunRes,cfgRes]=await Promise.all([
+      fetch(`${url}/api/states/${encodeURIComponent(entity)}`,{headers}),
+      fetch(`${url}/api/config`,{headers})
+    ]);
+    if(!sunRes.ok){
+      const errText=await sunRes.text().catch(()=>'');
+      throw new Error('Entity error: '+(errText || `HTTP ${sunRes.status}`));
     }
-    const data=await res.json();
-    const att=data.attributes||{};
+    const sunData=await sunRes.json();
+    const att=sunData.attributes||{};
     const haElevation=att.elevation;
     const haAzimuth=att.azimuth;
+
+    // fetch config for geolocation
+    if(cfgRes.ok){
+      const cfg=await cfgRes.json();
+      if(cfg.latitude!=null) $('lat').value=cfg.latitude;
+      if(cfg.longitude!=null) $('lon').value=cfg.longitude;
+      $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
+      $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
+    }
 
     // set date to today
     const today=new Date();
@@ -636,29 +669,47 @@ $('ha-fetch').addEventListener('click', async ()=>{
     const dd=String(today.getDate()).padStart(2,'0');
     $('date').value=`${yyyy}-${mm}-${dd}`;
 
-    // set solar hour from sun elevation (iterate to find matching hour)
     const lat=parseFloat($('lat').value);
     const N=dayOfYear($('date').value);
-    // binary search on hour to match HA elevation
-    let lo=4, hi=21;
-    for(let i=0;i<30;i++){
-      const mid=(lo+hi)/2;
-      const pos=sunPosition(lat,N,mid);
-      if(pos.h<haElevation) lo=mid;
-      else hi=mid;
+
+    // pick AM or PM half based on local time
+    const localHour=today.getHours()+today.getMinutes()/60;
+    const isPM=localHour>=12;
+    let lo=isPM?12:4, hi=isPM?21:12;
+
+    function search(lo,hi,ascending){
+      for(let i=0;i<30;i++){
+        const mid=(lo+hi)/2;
+        const pos=sunPosition(lat,N,mid);
+        const below=pos.h<haElevation;
+        if(ascending?below:!below) lo=mid;
+        else hi=mid;
+      }
+      return (lo+hi)/2;
     }
-    const foundHour=(lo+hi)/2;
+    let foundHour=search(lo,hi,isPM?false:true);
+
+    // if result is at boundary, elevation may not exist in this half → try the other
+    if(foundHour<=lo+0.01||foundHour>=hi-0.01){
+      const otherLo=isPM?4:12, otherHi=isPM?12:21;
+      const otherHour=search(otherLo,otherHi,isPM?true:false);
+      if(otherHour>otherLo+0.01&&otherHour<otherHi-0.01) foundHour=otherHour;
+    }
+
     const clampedHour=Math.max(4,Math.min(21,foundHour));
     $('hour').value=clampedHour;
+    $('v-hour').textContent=fmtHHMM(clampedHour);
 
-    // update value displays
-    const hh=parseFloat($('hour').value);
-    const hFloor=Math.floor(hh), hMin=Math.round((hh-hFloor)*60);
-    $('v-hour').textContent=String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
+    // compute local time estimate
+    const lonDeg=parseFloat($('lon').value);
+    const tzOff=-today.getTimezoneOffset()/60;
+    const tzMeridian=tzOff*15;
+    const eotEq=(lonDeg-tzMeridian)/15;
+    const estLocalH=((clampedHour+eotEq)%24+24)%24;
 
     status.style.display='block';
     status.className='status ok';
-    status.textContent=`Données récupérées — élévation ${haElevation.toFixed(1)}°, azimut ${haAzimuth.toFixed(1)}° (HA) → heure réglée vers ${$('v-hour').textContent}.`;
+    status.textContent=`Données récupérées — élévation ${haElevation.toFixed(1)}°, azimut ${haAzimuth.toFixed(1)}° (HA). Heure solaire ≈ ${fmtHHMM(clampedHour)}, heure locale ≈ ${fmtHHMM(estLocalH)}.`;
 
     render();
   }catch(err){
