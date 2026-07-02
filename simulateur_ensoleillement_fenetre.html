@@ -561,7 +561,7 @@ function render(){
   const tzOff=-jul.getTimezoneOffset()/60;
   const tzMeridian=tzOff*15;
   const eotEq=(lonDeg-tzMeridian)/15;
-  const localHour=((solarHour+eotEq)%24+24)%24;
+  const localHour=((solarHour-eotEq)%24+24)%24;
   $('v-localtime').textContent = fmtHHMM(localHour)+' (UTC'+(tzOff>=0?'+':'')+tzOff.toFixed(0)+')';
 }
 
@@ -581,6 +581,7 @@ function fmtHHMM(hour){
     $('v-d').textContent = parseFloat($('dscreen').value).toFixed(1);
     $('v-hm').textContent = parseFloat($('hmscreen').value).toFixed(1);
     $('v-orientc').textContent = parseFloat($('orientc').value).toFixed(0)+'°';
+    if(id==='lat'||id==='lon') saveGeo();
     render();
   });
 });
@@ -617,6 +618,24 @@ function loadHAConfig(){
   }catch(e){}
 }
 loadHAConfig();
+
+function saveGeo(){
+  try{
+    localStorage.setItem('geo_lat',$('lat').value);
+    localStorage.setItem('geo_lon',$('lon').value);
+  }catch(e){}
+}
+function loadGeo(){
+  try{
+    const latVal=localStorage.getItem('geo_lat');
+    const lonVal=localStorage.getItem('geo_lon');
+    if(latVal!=null) $('lat').value=latVal;
+    if(lonVal!=null) $('lon').value=lonVal;
+    $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
+    $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
+  }catch(e){}
+}
+loadGeo();
 
 $('ha-fetch').addEventListener('click', async ()=>{
   const btn=$('ha-fetch');
@@ -660,6 +679,7 @@ $('ha-fetch').addEventListener('click', async ()=>{
       if(cfg.longitude!=null) $('lon').value=cfg.longitude;
       $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
       $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
+      saveGeo();
     }
 
     // set date to today
@@ -669,34 +689,13 @@ $('ha-fetch').addEventListener('click', async ()=>{
     const dd=String(today.getDate()).padStart(2,'0');
     $('date').value=`${yyyy}-${mm}-${dd}`;
 
-    const lat=parseFloat($('lat').value);
-    const N=dayOfYear($('date').value);
-
-    // pick AM or PM half based on local time
-    const localHour=today.getHours()+today.getMinutes()/60;
-    const isPM=localHour>=12;
-    let lo=isPM?12:4, hi=isPM?21:12;
-
-    function search(lo,hi,ascending){
-      for(let i=0;i<30;i++){
-        const mid=(lo+hi)/2;
-        const pos=sunPosition(lat,N,mid);
-        const below=pos.h<haElevation;
-        if(ascending?below:!below) lo=mid;
-        else hi=mid;
-      }
-      return (lo+hi)/2;
-    }
-    let foundHour=search(lo,hi,isPM?false:true);
-
-    // if result is at boundary, elevation may not exist in this half → try the other
-    if(foundHour<=lo+0.01||foundHour>=hi-0.01){
-      const otherLo=isPM?4:12, otherHi=isPM?12:21;
-      const otherHour=search(otherLo,otherHi,isPM?true:false);
-      if(otherHour>otherLo+0.01&&otherHour<otherHi-0.01) foundHour=otherHour;
-    }
-
-    const clampedHour=Math.max(4,Math.min(21,foundHour));
+    // compute solar hour from browser local time + longitude
+    const localH = today.getHours() + today.getMinutes()/60 + today.getSeconds()/3600;
+    const lonDeg2 = parseFloat($('lon').value);
+    const tzOff2 = -today.getTimezoneOffset()/60;
+    const tzMeridian2 = tzOff2 * 15;
+    const solarH = ((localH + (lonDeg2 - tzMeridian2)/15) % 24 + 24) % 24;
+    const clampedHour = Math.max(4, Math.min(21, solarH));
     $('hour').value=clampedHour;
     $('v-hour').textContent=fmtHHMM(clampedHour);
 
@@ -705,7 +704,7 @@ $('ha-fetch').addEventListener('click', async ()=>{
     const tzOff=-today.getTimezoneOffset()/60;
     const tzMeridian=tzOff*15;
     const eotEq=(lonDeg-tzMeridian)/15;
-    const estLocalH=((clampedHour+eotEq)%24+24)%24;
+    const estLocalH=((clampedHour-eotEq)%24+24)%24;
 
     status.style.display='block';
     status.className='status ok';
