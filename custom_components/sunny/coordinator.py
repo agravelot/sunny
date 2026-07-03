@@ -42,7 +42,9 @@ class SunnyCoordinator(DataUpdateCoordinator):
         weather_entity = self.entry.data.get("weather_entity") or self.entry.options.get("weather_entity")
         if weather_entity:
             weather = self.hass.states.get(weather_entity)
-            if weather:
+            if weather is None:
+                _LOGGER.warning("Entité météo '%s' introuvable", weather_entity)
+            else:
                 weather_data["cloud_coverage"] = weather.attributes.get("cloud_coverage")
                 weather_data["weather_condition"] = weather.state
                 weather_data["temperature"] = weather.attributes.get("temperature")
@@ -56,7 +58,9 @@ class SunnyCoordinator(DataUpdateCoordinator):
             zone_entity = win.get("zone_entity")
             if zone_entity:
                 zone = self.hass.states.get(zone_entity)
-                if zone:
+                if zone is None:
+                    _LOGGER.warning("Entité zone '%s' introuvable pour la fenêtre '%s'", zone_entity, name)
+                else:
                     lat = zone.attributes.get("latitude", lat)
                     lon = zone.attributes.get("longitude", lon)
             orientation = win.get("orientation", 180)
