@@ -76,7 +76,6 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 W=width, Hw=height, e=wall,
                 D=sd, Hm=sh, altitude=alt,
             )
-            data["window_height"] = height
             data["cover_entity"] = win.get("cover_entity")
             data["zone_entity"] = win.get("zone_entity")
             strategy_name = win.get("strategy", "block_all")

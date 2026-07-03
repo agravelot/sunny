@@ -40,6 +40,8 @@ def compute_window(
         "solar_altitude": h,
         "solar_azimuth": As,
         "wall_azimuth": An,
+        "window_width": W,
+        "window_height": Hw,
         "gamma": gamma,
         "behind": behind,
         "horizon_dip": dip,
