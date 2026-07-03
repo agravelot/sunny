@@ -7,11 +7,13 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import SunnyCoordinator
+from .strategies import STRATEGIES
 
 
 async def async_setup_entry(
@@ -21,27 +23,59 @@ async def async_setup_entry(
 ) -> None:
     coordinator: SunnyCoordinator = hass.data[DOMAIN][entry.entry_id]
     windows = entry.options.get("windows", [])
-    async_add_entities(
-        SunnyWindowSensor(coordinator, win["name"])
-        for win in windows
-    )
+
+    entities = []
+    for win in windows:
+        name = win["name"]
+        device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{entry.entry_id}_{name}")},
+            name=name,
+            manufacturer="Sunny",
+            model="Gestion solaire de store",
+        )
+        entities.extend([
+            SunnySunSensor(coordinator, name, device_info),
+            SunnyPositionSensor(coordinator, name, device_info),
+            SunnyStrategySensor(coordinator, name, device_info),
+            SunnyCloudSensor(coordinator, name, device_info),
+        ])
+
+    async_add_entities(entities)
 
 
-class SunnyWindowSensor(CoordinatorEntity, SensorEntity):
-    """Capteur d'ensoleillement pour une fenêtre."""
+class SunnyBaseSensor(CoordinatorEntity, SensorEntity):
+    """Classe de base commune à tous les capteurs Sunny."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "window"
+
+    def __init__(
+        self,
+        coordinator: SunnyCoordinator,
+        window_name: str,
+        device_info: DeviceInfo,
+        sensor_type: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._window_name = window_name
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_{window_name}_{sensor_type}"
+        self._attr_device_info = device_info
+
+
+class SunnySunSensor(SunnyBaseSensor):
+    """Capteur d'ensoleillement direct (% de la fenêtre éclairée)."""
+
+    _attr_translation_key = "sun"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:sun-wireless"
 
-    def __init__(self, coordinator: SunnyCoordinator, window_name: str) -> None:
-        super().__init__(coordinator)
-        self._window_name = window_name
-        self._attr_unique_id = f"{coordinator.entry.entry_id}_{window_name}"
-        self._attr_translation_placeholders = {"window": window_name}
-        self._attr_name = window_name
+    def __init__(
+        self,
+        coordinator: SunnyCoordinator,
+        window_name: str,
+        device_info: DeviceInfo,
+    ) -> None:
+        super().__init__(coordinator, window_name, device_info, "sun")
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -62,14 +96,92 @@ class SunnyWindowSensor(CoordinatorEntity, SensorEntity):
             "lit_area_m2": data.get("lit_area_m2"),
             "screen_blocks_all": data.get("screen_blocks_all"),
             "horizon_dip": data.get("horizon_dip"),
-            "cloud_coverage": data.get("cloud_coverage"),
-            "weather_condition": data.get("weather_condition"),
-            "temperature": data.get("temperature"),
-            "cover_entity": data.get("cover_entity"),
-            "zone_entity": data.get("zone_entity"),
-            "strategy": data.get("strategy"),
-            "desired_position": data.get("desired_position"),
             "latitude": data.get("latitude"),
             "longitude": data.get("longitude"),
+        }
+        self.async_write_ha_state()
+
+
+class SunnyPositionSensor(SunnyBaseSensor):
+    """Capteur de position désirée du store (%)."""
+
+    _attr_translation_key = "position"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:blinds"
+
+    def __init__(
+        self,
+        coordinator: SunnyCoordinator,
+        window_name: str,
+        device_info: DeviceInfo,
+    ) -> None:
+        super().__init__(coordinator, window_name, device_info, "position")
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        data = self.coordinator.data.get(self._window_name)
+        if data is None:
+            return
+
+        self._attr_native_value = data.get("desired_position", 100)
+        self._attr_extra_state_attributes = {
+            "cover_entity": data.get("cover_entity"),
+        }
+        self.async_write_ha_state()
+
+
+class SunnyStrategySensor(SunnyBaseSensor):
+    """Capteur de stratégie active."""
+
+    _attr_translation_key = "strategy"
+    _attr_icon = "mdi:cog-outline"
+
+    def __init__(
+        self,
+        coordinator: SunnyCoordinator,
+        window_name: str,
+        device_info: DeviceInfo,
+    ) -> None:
+        super().__init__(coordinator, window_name, device_info, "strategy")
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        data = self.coordinator.data.get(self._window_name)
+        if data is None:
+            return
+
+        strategy_name = data.get("strategy", "")
+        strategy = STRATEGIES.get(strategy_name)
+        self._attr_native_value = strategy.label if strategy else strategy_name
+        self.async_write_ha_state()
+
+
+class SunnyCloudSensor(SunnyBaseSensor):
+    """Capteur de couverture nuageuse (%)."""
+
+    _attr_translation_key = "cloud"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:weather-cloudy"
+
+    def __init__(
+        self,
+        coordinator: SunnyCoordinator,
+        window_name: str,
+        device_info: DeviceInfo,
+    ) -> None:
+        super().__init__(coordinator, window_name, device_info, "cloud")
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        data = self.coordinator.data.get(self._window_name)
+        if data is None:
+            return
+
+        self._attr_native_value = data.get("cloud_coverage")
+        self._attr_extra_state_attributes = {
+            "weather_condition": data.get("weather_condition"),
+            "temperature": data.get("temperature"),
         }
         self.async_write_ha_state()
