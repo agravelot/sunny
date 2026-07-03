@@ -70,11 +70,13 @@ class SunnyCoordinator(DataUpdateCoordinator):
             sd = win.get("screen_distance", 0.0)
             sh = win.get("screen_height", 1.0)
             alt = win.get("altitude", 10)
+            ground_alt = win.get("ground_altitude", 208)
 
             data = compute_window(
                 h=h, As=As, An=orientation,
                 W=width, Hw=height, e=wall,
                 D=sd, Hm=sh, altitude=alt,
+                ground_altitude=ground_alt,
             )
             data["cover_entity"] = win.get("cover_entity")
             data["zone_entity"] = win.get("zone_entity")

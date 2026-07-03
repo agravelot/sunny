@@ -25,6 +25,7 @@ from .const import (
     CONF_SCREEN_DISTANCE,
     CONF_SCREEN_HEIGHT,
     CONF_ALTITUDE,
+    CONF_GROUND_ALTITUDE,
     CONF_ZONE_ENTITY,
     CONF_STRATEGY,
     CONF_LATITUDE,
@@ -37,6 +38,7 @@ from .const import (
     DEFAULT_SCREEN_DISTANCE,
     DEFAULT_SCREEN_HEIGHT,
     DEFAULT_ALTITUDE,
+    DEFAULT_GROUND_ALTITUDE,
     DEFAULT_STRATEGY,
 )
 from .strategies import STRATEGY_OPTIONS
@@ -60,6 +62,8 @@ WINDOW_SCHEMA = vol.Schema({
         vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
     vol.Required(CONF_ALTITUDE, default=DEFAULT_ALTITUDE):
         vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
+    vol.Required(CONF_GROUND_ALTITUDE, default=DEFAULT_GROUND_ALTITUDE):
+        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=3000.0)),
     vol.Required(CONF_STRATEGY, default=DEFAULT_STRATEGY): vol.In(STRATEGY_OPTIONS),
     vol.Optional(CONF_ZONE_ENTITY): EntitySelector(
         EntitySelectorConfig(domain="zone")
@@ -226,6 +230,8 @@ class SunnyOptionsFlow(OptionsFlow):
                     vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
                 vol.Required(CONF_ALTITUDE, default=with_defaults.get(CONF_ALTITUDE, DEFAULT_ALTITUDE)):
                     vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
+                vol.Required(CONF_GROUND_ALTITUDE, default=with_defaults.get(CONF_GROUND_ALTITUDE, DEFAULT_GROUND_ALTITUDE)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=3000.0)),
                 vol.Required(CONF_STRATEGY, default=with_defaults.get(CONF_STRATEGY, DEFAULT_STRATEGY)): vol.In(STRATEGY_OPTIONS),
                 vol.Optional(CONF_ZONE_ENTITY, default=with_defaults.get(CONF_ZONE_ENTITY)):
                     EntitySelector(EntitySelectorConfig(domain="zone")),

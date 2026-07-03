@@ -31,8 +31,9 @@ def compute_window(
     D: float = 0.0,
     Hm: float = 0.0,
     altitude: float = 0.0,
+    ground_altitude: float = 0.0,
 ) -> dict:
-    dip = horizon_dip(altitude)
+    dip = horizon_dip(ground_altitude + altitude)
     gamma = norm_angle180(As - An)
     behind = h <= -dip or abs(gamma) >= 90
 
@@ -45,6 +46,8 @@ def compute_window(
         "gamma": gamma,
         "behind": behind,
         "horizon_dip": dip,
+        "ground_altitude": ground_altitude,
+        "total_altitude": ground_altitude + altitude,
         "hp": None,
         "theta": None,
         "d_lat": 0.0,
