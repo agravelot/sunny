@@ -22,6 +22,7 @@
           "screen_distance": "Distance du mur écran (m, 0 = désactivé)",
           "screen_height": "Hauteur du mur écran (m)",
           "altitude": "Hauteur au-dessus du sol (m)",
+          "strategy": "Stratégie de pilotage",
           "zone_entity": "Entité zone (position géographique)",
           "latitude": "Latitude (optionnelle, défaut HA)",
           "longitude": "Longitude (optionnelle, défaut HA)"
@@ -58,6 +59,7 @@
           "screen_distance": "Distance du mur écran (m)",
           "screen_height": "Hauteur du mur écran (m)",
           "altitude": "Hauteur au-dessus du sol (m)",
+          "strategy": "Stratégie de pilotage",
           "zone_entity": "Entité zone (position géographique)",
           "latitude": "Latitude",
           "longitude": "Longitude"

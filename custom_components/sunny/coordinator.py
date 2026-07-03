@@ -9,6 +9,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN, UPDATE_INTERVAL_MINUTES
 from .solar_math import compute_window
+from .strategies import get_strategy
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,8 +72,13 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 W=width, Hw=height, e=wall,
                 D=sd, Hm=sh, altitude=alt,
             )
+            data["window_height"] = height
             data["cover_entity"] = win.get("cover_entity")
             data["zone_entity"] = win.get("zone_entity")
+            strategy_name = win.get("strategy", "block_all")
+            strategy = get_strategy(strategy_name)
+            data["strategy"] = strategy_name
+            data["desired_position"] = strategy.compute_position(data)
             data["cloud_coverage"] = weather_data["cloud_coverage"]
             data["weather_condition"] = weather_data["weather_condition"]
             data["temperature"] = weather_data["temperature"]
