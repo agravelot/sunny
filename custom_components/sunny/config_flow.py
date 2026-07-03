@@ -25,6 +25,7 @@ from .const import (
     CONF_SCREEN_DISTANCE,
     CONF_SCREEN_HEIGHT,
     CONF_ALTITUDE,
+    CONF_ZONE_ENTITY,
     CONF_LATITUDE,
     CONF_LONGITUDE,
     DEFAULT_NAME,
@@ -56,6 +57,9 @@ WINDOW_SCHEMA = vol.Schema({
         vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
     vol.Required(CONF_ALTITUDE, default=DEFAULT_ALTITUDE):
         vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
+    vol.Optional(CONF_ZONE_ENTITY): EntitySelector(
+        EntitySelectorConfig(domain="zone")
+    ),
     vol.Optional(CONF_LATITUDE): vol.All(vol.Coerce(float), vol.Range(min=-66, max=66)),
     vol.Optional(CONF_LONGITUDE): vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
 })
@@ -218,6 +222,8 @@ class SunnyOptionsFlow(OptionsFlow):
                     vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
                 vol.Required(CONF_ALTITUDE, default=with_defaults.get(CONF_ALTITUDE, DEFAULT_ALTITUDE)):
                     vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
+                vol.Optional(CONF_ZONE_ENTITY, default=with_defaults.get(CONF_ZONE_ENTITY)):
+                    EntitySelector(EntitySelectorConfig(domain="zone")),
                 vol.Optional(CONF_LATITUDE, default=with_defaults.get(CONF_LATITUDE)):
                     vol.All(vol.Coerce(float), vol.Range(min=-66, max=66)),
                 vol.Optional(CONF_LONGITUDE, default=with_defaults.get(CONF_LONGITUDE)):

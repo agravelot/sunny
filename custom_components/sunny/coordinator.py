@@ -52,6 +52,12 @@ class SunnyCoordinator(DataUpdateCoordinator):
             name = win.get("name", "Fenêtre")
             lat = win.get("latitude", self.hass.config.latitude)
             lon = win.get("longitude", self.hass.config.longitude)
+            zone_entity = win.get("zone_entity")
+            if zone_entity:
+                zone = self.hass.states.get(zone_entity)
+                if zone:
+                    lat = zone.attributes.get("latitude", lat)
+                    lon = zone.attributes.get("longitude", lon)
             orientation = win.get("orientation", 180)
             width = win.get("width", 1.2)
             height = win.get("height", 1.4)
@@ -66,6 +72,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 D=sd, Hm=sh, altitude=alt,
             )
             data["cover_entity"] = win.get("cover_entity")
+            data["zone_entity"] = win.get("zone_entity")
             data["cloud_coverage"] = weather_data["cloud_coverage"]
             data["weather_condition"] = weather_data["weather_condition"]
             data["temperature"] = weather_data["temperature"]

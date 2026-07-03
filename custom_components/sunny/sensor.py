@@ -66,6 +66,7 @@ class SunnyWindowSensor(CoordinatorEntity, SensorEntity):
             "weather_condition": data.get("weather_condition"),
             "temperature": data.get("temperature"),
             "cover_entity": data.get("cover_entity"),
+            "zone_entity": data.get("zone_entity"),
             "latitude": data.get("latitude"),
             "longitude": data.get("longitude"),
         }

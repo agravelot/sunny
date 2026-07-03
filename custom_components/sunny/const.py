@@ -14,6 +14,7 @@ CONF_WALL_THICKNESS = "wall_thickness"
 CONF_SCREEN_DISTANCE = "screen_distance"
 CONF_SCREEN_HEIGHT = "screen_height"
 CONF_ALTITUDE = "altitude"
+CONF_ZONE_ENTITY = "zone_entity"
 CONF_LATITUDE = "latitude"
 CONF_LONGITUDE = "longitude"
 
