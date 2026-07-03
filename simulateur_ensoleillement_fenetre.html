@@ -212,6 +212,10 @@
           <input type="range" id="lon" min="-180" max="180" step="0.05" value="2.35">
         </div>
         <div class="field">
+          <label>Altitude du sol (niveau de la mer) <span class="val" id="v-alt-sol">208 m</span></label>
+          <input type="range" id="altitude-sol" min="0" max="3000" step="10" value="208">
+        </div>
+        <div class="field">
           <label>Hauteur de la fenêtre au-dessus du sol <span class="val" id="v-alt">10 m</span></label>
           <input type="range" id="altitude" min="0" max="500" step="1" value="10">
         </div>
@@ -373,9 +377,11 @@ function computeAll(){
   const useScreen = $('screen-toggle').classList.contains('on');
   const D=parseFloat($('dscreen').value);
   const Hm=parseFloat($('hmscreen').value);
-  const altitude=parseFloat($('altitude').value);
+  const altitudeSol=parseFloat($('altitude-sol').value);
+  const altitudeFenetre=parseFloat($('altitude').value);
+  const altitudeTotale=altitudeSol+altitudeFenetre;
 
-  const dip=altitude>0 ? r2d(Math.acos(6371/(6371+altitude/1000))) : 0;
+  const dip=altitudeTotale>0 ? r2d(Math.acos(6371/(6371+altitudeTotale/1000))) : 0;
 
   let gamma=normAngle180(As-An);
   const behind = h<=-dip || Math.abs(gamma)>=90;
@@ -406,7 +412,7 @@ if(useScreen){
   const litArea = litWidth*litHeight;
   const pct = area>0 ? (litArea/area*100) : 0;
 
-  return {lat,N,hour,h,As,An,W,Hw,e,useScreen,D,Hm,altitude,dip,gamma,behind,theta,hp,dLat,dVert,Wutile,Hutile,yOmbre,screenBlocksAll,litHeight,litWidth,pct};
+  return {lat,N,hour,h,As,An,W,Hw,e,useScreen,D,Hm,altitudeSol,altitudeFenetre,altitudeTotale,dip,gamma,behind,theta,hp,dLat,dVert,Wutile,Hutile,yOmbre,screenBlocksAll,litHeight,litWidth,pct};
 }
 
 function fmt(v,d=1){ return isFinite(v)? v.toFixed(d) : '—'; }
@@ -596,10 +602,11 @@ function fmtHHMM(hour){
   const hFloor=Math.floor(hour), hMin=Math.round((hour-hFloor)*60);
   return String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
 }
-['lat','lon','altitude','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc'].forEach(id=>{
+['lat','lon','altitude','altitude-sol','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc'].forEach(id=>{
   $(id).addEventListener('input', ()=>{
     $('v-lat').textContent = parseFloat($('lat').value).toFixed(2)+'°';
     $('v-lon').textContent = parseFloat($('lon').value).toFixed(2)+'°';
+    $('v-alt-sol').textContent = parseInt($('altitude-sol').value)+' m';
     $('v-alt').textContent = parseInt($('altitude').value)+' m';
     $('v-hour').textContent = fmtHHMM(parseFloat($('hour').value));
     $('v-w').textContent = parseFloat($('wwin').value).toFixed(2);
@@ -651,6 +658,7 @@ function saveGeo(){
     localStorage.setItem('geo_lat',$('lat').value);
     localStorage.setItem('geo_lon',$('lon').value);
     localStorage.setItem('geo_alt',$('altitude').value);
+    localStorage.setItem('geo_altsol',$('altitude-sol').value);
   }catch(e){}
 }
 function loadGeo(){
@@ -658,11 +666,14 @@ function loadGeo(){
     const latVal=localStorage.getItem('geo_lat');
     const lonVal=localStorage.getItem('geo_lon');
     const altVal=localStorage.getItem('geo_alt');
+    const altSolVal=localStorage.getItem('geo_altsol');
     if(latVal!=null) $('lat').value=latVal;
     if(lonVal!=null) $('lon').value=lonVal;
     if(altVal!=null) $('altitude').value=altVal;
+    if(altSolVal!=null) $('altitude-sol').value=altSolVal;
     $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
     $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
+    $('v-alt-sol').textContent=parseInt($('altitude-sol').value)+' m';
     $('v-alt').textContent=parseInt($('altitude').value)+' m';
   }catch(e){}
 }
