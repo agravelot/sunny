@@ -89,6 +89,12 @@
         "data": {
           "weather_entity": "Entité météo (optionnelle)"
         }
+      },
+      "refresh": {
+        "title": "Fréquence de rafraîchissement",
+        "data": {
+          "refresh_interval": "Intervalle de rafraîchissement (minutes)"
+        }
       }
     }
   },
@@ -99,6 +105,7 @@
         "delete": "Supprimer",
         "add": "Ajouter une fenêtre",
         "weather": "Changer l'entité météo",
+        "refresh": "Modifier la fréquence de rafraîchissement",
         "done": "Terminé"
       }
     }

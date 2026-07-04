@@ -30,6 +30,7 @@ from .const import (
     CONF_STRATEGY,
     CONF_LATITUDE,
     CONF_LONGITUDE,
+    CONF_REFRESH_INTERVAL,
     DEFAULT_NAME,
     DEFAULT_ORIENTATION,
     DEFAULT_WIDTH,
@@ -40,6 +41,7 @@ from .const import (
     DEFAULT_ALTITUDE,
     DEFAULT_GROUND_ALTITUDE,
     DEFAULT_STRATEGY,
+    DEFAULT_REFRESH_INTERVAL,
 )
 from .strategies import STRATEGY_OPTIONS
 
@@ -181,6 +183,8 @@ class SunnyOptionsFlow(OptionsFlow):
                 return await self.async_step_init()
             elif action == "weather":
                 return await self.async_step_weather()
+            elif action == "refresh":
+                return await self.async_step_refresh()
             elif action == "done":
                 return self.async_create_entry(
                     data=self.entry.data,
@@ -194,7 +198,7 @@ class SunnyOptionsFlow(OptionsFlow):
         options.append({"label": "+ Ajouter une fenêtre", "value": "add"})
 
         schema = vol.Schema({
-            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "done"]),
+            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "refresh", "done"]),
             vol.Optional("window"): vol.In({o["value"]: o["label"] for o in options}),
         })
 
@@ -275,5 +279,19 @@ class SunnyOptionsFlow(OptionsFlow):
                 vol.Optional(CONF_WEATHER_ENTITY, default=current): EntitySelector(
                     EntitySelectorConfig(domain="weather")
                 ),
+            }),
+        )
+
+    async def async_step_refresh(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            self.data[CONF_REFRESH_INTERVAL] = user_input[CONF_REFRESH_INTERVAL]
+            return await self.async_step_init()
+
+        current = self.data.get(CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL)
+        return self.async_show_form(
+            step_id="refresh",
+            data_schema=vol.Schema({
+                vol.Required(CONF_REFRESH_INTERVAL, default=current):
+                    vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
             }),
         )

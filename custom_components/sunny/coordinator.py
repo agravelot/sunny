@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import DOMAIN, UPDATE_INTERVAL_MINUTES
+from .const import DOMAIN, DEFAULT_REFRESH_INTERVAL
 from .solar_math import compute_window
 from .strategies import get_strategy
 
@@ -18,11 +18,12 @@ class SunnyCoordinator(DataUpdateCoordinator):
     """Coordinateur qui recalcule l'ensoleillement périodiquement."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        interval = entry.options.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES),
+            update_interval=timedelta(minutes=interval),
         )
         self.entry = entry
 
