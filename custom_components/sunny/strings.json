@@ -102,21 +102,5 @@
         "done": "Terminé"
       }
     }
-  },
-  "entity": {
-    "sensor": {
-      "sun": {
-        "name": "Ensoleillement"
-      },
-      "position": {
-        "name": "Position désirée"
-      },
-      "strategy": {
-        "name": "Stratégie"
-      },
-      "cloud": {
-        "name": "Couverture nuageuse"
-      }
-    }
   }
 }

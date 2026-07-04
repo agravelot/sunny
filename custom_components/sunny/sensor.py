@@ -64,7 +64,6 @@ class SunnyBaseSensor(CoordinatorEntity, SensorEntity):
 class SunnySunSensor(SunnyBaseSensor):
     """Capteur d'ensoleillement direct (% de la fenêtre éclairée)."""
 
-    _attr_translation_key = "sun"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:sun-wireless"
@@ -76,6 +75,7 @@ class SunnySunSensor(SunnyBaseSensor):
         device_info: DeviceInfo,
     ) -> None:
         super().__init__(coordinator, window_name, device_info, "sun")
+        self._attr_name = f"{window_name} Ensoleillement"
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -105,7 +105,6 @@ class SunnySunSensor(SunnyBaseSensor):
 class SunnyPositionSensor(SunnyBaseSensor):
     """Capteur de position désirée du store (%)."""
 
-    _attr_translation_key = "position"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:blinds"
@@ -117,6 +116,7 @@ class SunnyPositionSensor(SunnyBaseSensor):
         device_info: DeviceInfo,
     ) -> None:
         super().__init__(coordinator, window_name, device_info, "position")
+        self._attr_name = f"{window_name} Position désirée"
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -134,7 +134,6 @@ class SunnyPositionSensor(SunnyBaseSensor):
 class SunnyStrategySensor(SunnyBaseSensor):
     """Capteur de stratégie active."""
 
-    _attr_translation_key = "strategy"
     _attr_icon = "mdi:cog-outline"
 
     def __init__(
@@ -144,6 +143,7 @@ class SunnyStrategySensor(SunnyBaseSensor):
         device_info: DeviceInfo,
     ) -> None:
         super().__init__(coordinator, window_name, device_info, "strategy")
+        self._attr_name = f"{window_name} Stratégie"
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -160,7 +160,6 @@ class SunnyStrategySensor(SunnyBaseSensor):
 class SunnyCloudSensor(SunnyBaseSensor):
     """Capteur de couverture nuageuse (%)."""
 
-    _attr_translation_key = "cloud"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:weather-cloudy"
@@ -172,6 +171,7 @@ class SunnyCloudSensor(SunnyBaseSensor):
         device_info: DeviceInfo,
     ) -> None:
         super().__init__(coordinator, window_name, device_info, "cloud")
+        self._attr_name = f"{window_name} Couverture nuageuse"
 
     @callback
     def _handle_coordinator_update(self) -> None:
