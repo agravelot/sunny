@@ -1,5 +1,7 @@
 """Plateforme capteur pour l'intégration Sunny."""
 
+import logging
+
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
@@ -7,6 +9,8 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -14,6 +18,37 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import SunnyCoordinator
 from .strategies import STRATEGIES
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _resolve_cover_device_info(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    cover_entity_id: str,
+    window_name: str,
+) -> DeviceInfo:
+    """Résout le DeviceInfo en se liant au device du cover s'il existe."""
+    ent_reg = er.async_get(hass)
+    dev_reg = dr.async_get(hass)
+
+    entity_entry = ent_reg.async_get(cover_entity_id)
+    if entity_entry and entity_entry.device_id:
+        device = dev_reg.async_get(entity_entry.device_id)
+        if device and device.identifiers:
+            return DeviceInfo(identifiers=device.identifiers)
+
+    _LOGGER.debug(
+        "Cover '%s' sans device, création d'un device Sunny dédié pour '%s'",
+        cover_entity_id,
+        window_name,
+    )
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{entry.entry_id}_{window_name}")},
+        name=window_name,
+        manufacturer="Sunny",
+        model="Gestion solaire de store",
+    )
 
 
 async def async_setup_entry(
@@ -27,12 +62,18 @@ async def async_setup_entry(
     entities = []
     for win in windows:
         name = win["name"]
-        device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{entry.entry_id}_{name}")},
-            name=name,
-            manufacturer="Sunny",
-            model="Gestion solaire de store",
-        )
+        cover_entity_id = win.get("cover_entity", "")
+        if cover_entity_id:
+            device_info = _resolve_cover_device_info(
+                hass, entry, cover_entity_id, name
+            )
+        else:
+            device_info = DeviceInfo(
+                identifiers={(DOMAIN, f"{entry.entry_id}_{name}")},
+                name=name,
+                manufacturer="Sunny",
+                model="Gestion solaire de store",
+            )
         entities.extend([
             SunnySunSensor(coordinator, name, device_info),
             SunnyPositionSensor(coordinator, name, device_info),
