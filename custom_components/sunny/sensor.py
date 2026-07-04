@@ -22,7 +22,7 @@ from .strategies import STRATEGIES
 _LOGGER = logging.getLogger(__name__)
 
 
-def _fallback_device_info(entry: ConfigEntry, window_name: str) -> DeviceInfo:
+def fallback_device_info(entry: ConfigEntry, window_name: str) -> DeviceInfo:
     """Crée un DeviceInfo Sunny dédié (fallback)."""
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry.entry_id}_{window_name}")},
@@ -32,7 +32,7 @@ def _fallback_device_info(entry: ConfigEntry, window_name: str) -> DeviceInfo:
     )
 
 
-async def _resolve_cover_device(
+async def resolve_cover_device(
     hass: HomeAssistant,
     entry: ConfigEntry,
     cover_entity_id: str,
@@ -56,14 +56,14 @@ async def _resolve_cover_device(
                 "Entité '%s' introuvable (ni registry, ni states)",
                 cover_entity_id,
             )
-        return _fallback_device_info(entry, window_name)
+        return fallback_device_info(entry, window_name)
 
     if not entity_entry.device_id:
         _LOGGER.info(
             "Entité '%s' sans device_id dans l'entity_registry",
             cover_entity_id,
         )
-        return _fallback_device_info(entry, window_name)
+        return fallback_device_info(entry, window_name)
 
     device = dev_reg.async_get(entity_entry.device_id)
     if not device:
@@ -72,7 +72,7 @@ async def _resolve_cover_device(
             entity_entry.device_id,
             cover_entity_id,
         )
-        return _fallback_device_info(entry, window_name)
+        return fallback_device_info(entry, window_name)
 
     if not device.identifiers:
         _LOGGER.info(
@@ -80,7 +80,7 @@ async def _resolve_cover_device(
             device.name or entity_entry.device_id,
             cover_entity_id,
         )
-        return _fallback_device_info(entry, window_name)
+        return fallback_device_info(entry, window_name)
 
     _LOGGER.info(
         "Device trouvé pour '%s' : '%s', identifiers=%s",
@@ -110,11 +110,11 @@ async def async_setup_entry(
         name = win["name"]
         cover_entity_id = win.get("cover_entity", "")
         if cover_entity_id:
-            device_info = await _resolve_cover_device(
+            device_info = await resolve_cover_device(
                 hass, entry, cover_entity_id, name
             )
         else:
-            device_info = _fallback_device_info(entry, name)
+            device_info = fallback_device_info(entry, name)
         entities.extend([
             SunnySunSensor(coordinator, name, device_info),
             SunnyPositionSensor(coordinator, name, device_info),

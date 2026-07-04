@@ -52,7 +52,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
 
         results = {}
         windows = self.entry.options.get("windows", [])
-        for win in windows:
+        for idx, win in enumerate(windows):
             name = win.get("name", "Fenêtre")
             lat = win.get("latitude", self.hass.config.latitude)
             lon = win.get("longitude", self.hass.config.longitude)
@@ -90,6 +90,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
             data["temperature"] = weather_data["temperature"]
             data["latitude"] = lat
             data["longitude"] = lon
+            data["window_idx"] = idx
             results[name] = data
 
         return results
