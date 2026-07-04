@@ -22,7 +22,17 @@ from .strategies import STRATEGIES
 _LOGGER = logging.getLogger(__name__)
 
 
-def _resolve_cover_device_info(
+def _fallback_device_info(entry: ConfigEntry, window_name: str) -> DeviceInfo:
+    """Crée un DeviceInfo Sunny dédié (fallback)."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{entry.entry_id}_{window_name}")},
+        name=window_name,
+        manufacturer="Sunny",
+        model="Gestion solaire de store",
+    )
+
+
+async def _resolve_cover_device(
     hass: HomeAssistant,
     entry: ConfigEntry,
     cover_entity_id: str,
@@ -33,22 +43,58 @@ def _resolve_cover_device_info(
     dev_reg = dr.async_get(hass)
 
     entity_entry = ent_reg.async_get(cover_entity_id)
-    if entity_entry and entity_entry.device_id:
-        device = dev_reg.async_get(entity_entry.device_id)
-        if device and device.identifiers:
-            return DeviceInfo(identifiers=device.identifiers)
+    if not entity_entry:
+        state = hass.states.get(cover_entity_id)
+        if state:
+            _LOGGER.info(
+                "Entité '%s' trouvée dans hass.states mais absente de l'entity_registry "
+                "(intégration probablement en cours de chargement)",
+                cover_entity_id,
+            )
+        else:
+            _LOGGER.info(
+                "Entité '%s' introuvable (ni registry, ni states)",
+                cover_entity_id,
+            )
+        return _fallback_device_info(entry, window_name)
 
-    _LOGGER.debug(
-        "Cover '%s' sans device, création d'un device Sunny dédié pour '%s'",
+    if not entity_entry.device_id:
+        _LOGGER.info(
+            "Entité '%s' sans device_id dans l'entity_registry",
+            cover_entity_id,
+        )
+        return _fallback_device_info(entry, window_name)
+
+    device = dev_reg.async_get(entity_entry.device_id)
+    if not device:
+        _LOGGER.info(
+            "Device '%s' introuvable dans le device_registry pour l'entité '%s'",
+            entity_entry.device_id,
+            cover_entity_id,
+        )
+        return _fallback_device_info(entry, window_name)
+
+    if not device.identifiers:
+        _LOGGER.info(
+            "Device '%s' sans identifiers pour l'entité '%s'",
+            device.name or entity_entry.device_id,
+            cover_entity_id,
+        )
+        return _fallback_device_info(entry, window_name)
+
+    _LOGGER.info(
+        "Device trouvé pour '%s' : '%s', identifiers=%s",
         cover_entity_id,
-        window_name,
+        device.name,
+        device.identifiers,
     )
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{entry.entry_id}_{window_name}")},
-        name=window_name,
-        manufacturer="Sunny",
-        model="Gestion solaire de store",
+
+    dev_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers=device.identifiers,
     )
+
+    return DeviceInfo(identifiers=device.identifiers)
 
 
 async def async_setup_entry(
@@ -64,16 +110,11 @@ async def async_setup_entry(
         name = win["name"]
         cover_entity_id = win.get("cover_entity", "")
         if cover_entity_id:
-            device_info = _resolve_cover_device_info(
+            device_info = await _resolve_cover_device(
                 hass, entry, cover_entity_id, name
             )
         else:
-            device_info = DeviceInfo(
-                identifiers={(DOMAIN, f"{entry.entry_id}_{name}")},
-                name=name,
-                manufacturer="Sunny",
-                model="Gestion solaire de store",
-            )
+            device_info = _fallback_device_info(entry, name)
         entities.extend([
             SunnySunSensor(coordinator, name, device_info),
             SunnyPositionSensor(coordinator, name, device_info),
