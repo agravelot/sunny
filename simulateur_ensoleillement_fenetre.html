@@ -623,7 +623,7 @@ function renderSection(r){
       parts.push(`<rect x="${litX}" y="${baseLitY}" width="${litW}" height="${baseLitH}" fill="var(--sun-filtered)" opacity="${0.3 + 0.6*transmission}"/>`);
     } else {
       // Phase levée : split entre zone dégagée (plein soleil) et zone couverte (filtrée)
-      const coverYPx = sillY - r.coverY*scale;
+      const coverYPx = headY + r.coverY*scale;
 
       // Zone dégagée (sous le store)
       const clearTop = Math.max(r.dVert, r.coverY);
