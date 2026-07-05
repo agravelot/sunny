@@ -79,3 +79,7 @@ class SunnyStrategySelect(CoordinatorEntity, SelectEntity):
         self.hass.config_entries.async_update_entry(
             self.coordinator.entry, options=new_options
         )
+        self.coordinator.entry = self.hass.config_entries.async_get_entry(
+            self.coordinator.entry.entry_id
+        )
+        await self.coordinator.async_request_refresh()
