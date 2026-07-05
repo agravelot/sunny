@@ -16,6 +16,7 @@
     --text-muted:#8b9aab;
     --sun:#f2a65a;
     --sun-strong:#ffcf8f;
+    --sun-filtered:#d4a056;
     --shadow-fill:#33414f;
     --sky:#6fa8dc;
     --alert:#e2725b;
@@ -292,6 +293,23 @@
       </div>
 
       <div class="panel">
+        <h2>Store</h2>
+        <div class="field">
+          <label>Position du store <span class="val" id="v-cover">100 %</span></label>
+          <input type="range" id="cover-pos" min="0" max="100" step="1" value="100">
+        </div>
+        <div class="field">
+          <label>Seuil de tilt (levée du bas) <span class="val" id="v-tilt">5 %</span></label>
+          <input type="range" id="tilt-threshold" min="0" max="100" step="1" value="5">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Transmission lamelles ouvertes <span class="val" id="v-slat">5 %</span></label>
+          <input type="range" id="slat-transmission" min="0" max="100" step="1" value="5">
+        </div>
+        <p class="note" style="margin-top:8px;">De 0% au seuil de tilt : les lamelles basculent sans lever le bas du store (lumière filtrée, sans éblouissement). Au-delà : le bas se lève physiquement.</p>
+      </div>
+
+      <div class="panel">
         <h2>Home Assistant</h2>
         <div class="field">
           <label>URL du serveur</label>
@@ -412,7 +430,56 @@ if(useScreen){
   const litArea = litWidth*litHeight;
   const pct = area>0 ? (litArea/area*100) : 0;
 
-  return {lat,N,hour,h,As,An,W,Hw,e,useScreen,D,Hm,altitudeSol,altitudeFenetre,altitudeTotale,dip,gamma,behind,theta,hp,dLat,dVert,Wutile,Hutile,yOmbre,screenBlocksAll,litHeight,litWidth,pct};
+  // --- Calcul du store ---
+  const coverPos = parseFloat($('cover-pos').value);
+  const tiltThreshold = parseFloat($('tilt-threshold').value);
+  const slatTransmission = parseFloat($('slat-transmission').value)/100;
+  let coverY = Hw, coverPhase = 'lift', coverLitPct = pct, coverLitArea = litArea;
+
+  if(!behind && !screenBlocksAll && area>0 && coverPos<100){
+    const litW = Math.max(0, W-dLat);
+
+    if(tiltThreshold>0 && tiltThreshold<100 && coverPos <= tiltThreshold){
+      // Phase tilt : store baissé, lamelles basculent
+      coverPhase = 'tilt';
+      coverY = Hw;
+      const transmission = (coverPos / tiltThreshold) * slatTransmission;
+      const baseLitH = Math.max(0, Hutile - yOmbre);
+      coverLitPct = (litW * baseLitH * transmission / area * 100);
+      coverLitArea = litW * baseLitH * transmission;
+    } else if(tiltThreshold>0 && tiltThreshold<100){
+      // Phase levée : lamelles ouvertes, bas du store lève
+      coverPhase = 'lift';
+      const effPos = (coverPos - tiltThreshold) / (100 - tiltThreshold) * 100;
+      coverY = Hw * (1 - effPos/100);
+
+      // Zone dégagée
+      const clearTop = Math.max(dVert, coverY);
+      const clearBottom = Hw - yOmbre;
+      const clearH = Math.max(0, clearBottom - clearTop);
+      const clearLit = litW * clearH;
+
+      // Zone couverte (lamelles ouvertes)
+      const slatTop = dVert;
+      const slatBottom = Math.min(coverY, Hw - yOmbre);
+      const slatH = Math.max(0, slatBottom - slatTop);
+      const slatLit = litW * slatH * slatTransmission;
+
+      coverLitPct = (clearLit + slatLit) / area * 100;
+      coverLitArea = clearLit + slatLit;
+    } else {
+      // Pas de tilt : modèle simple
+      coverY = Hw * (1 - coverPos/100);
+      const covTop = Math.max(dVert, coverY);
+      const covBottom = Hw - yOmbre;
+      const covH = Math.max(0, covBottom - covTop);
+      coverLitPct = (litW * covH / area * 100);
+      coverLitArea = litW * covH;
+    }
+  }
+
+  return {lat,N,hour,h,As,An,W,Hw,e,useScreen,D,Hm,altitudeSol,altitudeFenetre,altitudeTotale,dip,gamma,behind,theta,hp,dLat,dVert,Wutile,Hutile,yOmbre,screenBlocksAll,litHeight,litWidth,pct,
+    coverPos,tiltThreshold,slatTransmission:slatTransmission*100,coverY,coverPhase,coverLitPct,coverLitArea};
 }
 
 function fmt(v,d=1){ return isFinite(v)? v.toFixed(d) : '—'; }
@@ -427,10 +494,12 @@ function renderMetrics(r){
     ["Angle d'incidence θ", r.behind? '—' : fmt(r.theta)+'°'],
     ['Ombre tableau lat.', fmt(r.dLat,2)+' m'],
     ['Ombre linteau', fmt(r.dVert,2)+' m'],
-    ['Surface éclairée', fmt(r.pct,0)+' %'],
+    ['Surface éclairée (sans store)', fmt(r.pct,0)+' %'],
+    ['Phase store', r.coverPos>=100 ? 'ouvert' : r.coverPhase==='tilt' ? 'tilt (lamelles)' : 'levée'],
+    ['Surface éclairée (avec store)', fmt(r.coverLitPct,1)+' %'],
   ];
   el.innerHTML=rows.map(([label,val],i)=>`
-    <div class="metric ${i===rows.length-1?'highlight':''}">
+    <div class="metric ${i>=rows.length-2?'highlight':''}">
       <div class="label">${label}</div>
       <div class="value">${val}</div>
     </div>`).join('');
@@ -446,6 +515,13 @@ function renderStatus(r){
   } else if(r.screenBlocksAll){
     el.className='status bad';
     el.textContent = 'Le mur écran masque entièrement le rayon direct à cette heure.';
+  } else if(r.coverPos<100 && r.coverPhase==='tilt'){
+    el.className='status ok';
+    const tlPct = (r.coverPos / r.tiltThreshold * r.slatTransmission).toFixed(1);
+    el.textContent = `Store en phase tilt (lamelles) — ${tlPct}% de transmission filtrée (sans éblouissement).`;
+  } else if(r.coverPos<100 && r.coverPhase==='lift'){
+    el.className='status ok';
+    el.textContent = `Store partiellement levé — ${fmt(r.coverLitPct,1)}% de la surface vitrée éclairée (dont zone filtrée via lamelles).`;
   } else if(r.pct<1){
     el.className='status bad';
     el.textContent = 'Fenêtre quasi entièrement à l\'ombre (embrasure et/ou écran).';
@@ -532,12 +608,46 @@ function renderSection(r){
   parts.push(`<rect x="${winX0}" y="${headY}" width="${winPxW}" height="${winPxH}" fill="var(--shadow-fill)" stroke="var(--wall-line)"/>`);
 
   if(!r.behind && r.litHeight>0){
-    const litPx = r.litHeight*scale;
-    const litY = sillY - (r.yOmbre*scale) - litPx;
     const dLatPx = r.W>0 ? (r.dLat/r.W)*winPxW : 0;
     const litX = r.gamma>0 ? winX0 : winX0+dLatPx;
     const litW = winPxW - dLatPx;
-    parts.push(`<rect x="${litX}" y="${Math.max(litY,headY)}" width="${litW}" height="${litPx}" fill="var(--sun)" opacity="0.85"/>`);
+    const baseLitY = headY + r.dVert*scale;
+    const baseLitH = Math.max(0, r.litHeight*scale);
+
+    if(r.coverPos>=100){
+      // Pas de store ou store ouvert : rendu architectural classique
+      parts.push(`<rect x="${litX}" y="${baseLitY}" width="${litW}" height="${baseLitH}" fill="var(--sun)" opacity="0.85"/>`);
+    } else if(r.coverPhase==='tilt'){
+      // Phase tilt : toute la zone éclairée est filtrée par les lamelles
+      const transmission = (r.coverPos / r.tiltThreshold) * (r.slatTransmission / 100);
+      parts.push(`<rect x="${litX}" y="${baseLitY}" width="${litW}" height="${baseLitH}" fill="var(--sun-filtered)" opacity="${0.3 + 0.6*transmission}"/>`);
+    } else {
+      // Phase levée : split entre zone dégagée (plein soleil) et zone couverte (filtrée)
+      const coverYPx = sillY - r.coverY*scale;
+
+      // Zone dégagée (sous le store)
+      const clearTop = Math.max(r.dVert, r.coverY);
+      const clearYPx = headY + clearTop*scale;
+      const clearBottom = r.Hw - r.yOmbre;
+      const clearH = Math.max(0, clearBottom - clearTop)*scale;
+      if(clearH>0){
+        parts.push(`<rect x="${litX}" y="${clearYPx}" width="${litW}" height="${clearH}" fill="var(--sun)" opacity="0.85"/>`);
+      }
+
+      // Zone couverte par le store (lamelles ouvertes, lumière filtrée)
+      const slatTop = r.dVert;
+      const slatYPx = headY + slatTop*scale;
+      const slatBottom = Math.min(r.coverY, r.Hw - r.yOmbre);
+      const slatH = Math.max(0, slatBottom - slatTop)*scale;
+      if(slatH>0){
+        const slatTransp = r.slatTransmission/100;
+        parts.push(`<rect x="${litX}" y="${slatYPx}" width="${litW}" height="${slatH}" fill="var(--sun-filtered)" opacity="${0.15 + 0.7*slatTransp}"/>`);
+      }
+
+      // Barre du bas du store
+      const barH = Math.max(3, Math.min(8, r.Hw*scale*0.04));
+      parts.push(`<rect x="${winX0-2}" y="${coverYPx-barH/2}" width="${winPxW+4}" height="${barH}" fill="var(--text-muted)" rx="1"/>`);
+    }
   }
 
   // lintel shadow band (top)
@@ -551,6 +661,20 @@ function renderSection(r){
     const dLatPx = r.W>0 ? (r.dLat/r.W)*winPxW : 0;
     const shadowX = r.gamma>0 ? winX0+winPxW-dLatPx : winX0;
     parts.push(`<rect x="${shadowX}" y="${headY}" width="${dLatPx}" height="${winPxH}" fill="var(--shadow-fill)" opacity="0.85"/>`);
+  }
+
+  // Store : lignes de lamelles en phase tilt
+  if(!r.behind && r.coverPhase==='tilt' && r.litHeight>0){
+    const dLatPx = r.W>0 ? (r.dLat/r.W)*winPxW : 0;
+    const litX2 = r.gamma>0 ? winX0 : winX0+dLatPx;
+    const litW2 = winPxW - dLatPx;
+    const topY = headY + r.dVert*scale;
+    const botY = headY + (r.Hw - r.yOmbre)*scale;
+    const nSlats = 6;
+    for(let i=1;i<=nSlats;i++){
+      const y = topY + (botY-topY)*i/(nSlats+1);
+      parts.push(`<line x1="${litX2}" y1="${y}" x2="${litX2+litW2}" y2="${y}" stroke="var(--text-muted)" stroke-width="0.8" stroke-dasharray="3,3" opacity="0.6"/>`);
+    }
   }
 
   // sun ray (profile angle) if visible
@@ -602,7 +726,7 @@ function fmtHHMM(hour){
   const hFloor=Math.floor(hour), hMin=Math.round((hour-hFloor)*60);
   return String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
 }
-['lat','lon','altitude','altitude-sol','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc'].forEach(id=>{
+['lat','lon','altitude','altitude-sol','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc','cover-pos','tilt-threshold','slat-transmission'].forEach(id=>{
   $(id).addEventListener('input', ()=>{
     $('v-lat').textContent = parseFloat($('lat').value).toFixed(2)+'°';
     $('v-lon').textContent = parseFloat($('lon').value).toFixed(2)+'°';
@@ -615,7 +739,11 @@ function fmtHHMM(hour){
     $('v-d').textContent = parseFloat($('dscreen').value).toFixed(1);
     $('v-hm').textContent = parseFloat($('hmscreen').value).toFixed(1);
     $('v-orientc').textContent = parseFloat($('orientc').value).toFixed(0)+'°';
+    $('v-cover').textContent = parseInt($('cover-pos').value)+' %';
+    $('v-tilt').textContent = parseInt($('tilt-threshold').value)+' %';
+    $('v-slat').textContent = parseInt($('slat-transmission').value)+' %';
     if(id==='lat'||id==='lon'){ saveGeo(); updateMapMarker(); }
+    if(id.startsWith('cover') || id.startsWith('tilt') || id.startsWith('slat')){ saveStore(); }
     render();
   });
 });
@@ -678,6 +806,28 @@ function loadGeo(){
   }catch(e){}
 }
 loadGeo();
+
+function saveStore(){
+  try{
+    localStorage.setItem('store_pos',$('cover-pos').value);
+    localStorage.setItem('store_tilt',$('tilt-threshold').value);
+    localStorage.setItem('store_slat',$('slat-transmission').value);
+  }catch(e){}
+}
+function loadStore(){
+  try{
+    const pos=localStorage.getItem('store_pos');
+    const tilt=localStorage.getItem('store_tilt');
+    const slat=localStorage.getItem('store_slat');
+    if(pos!=null) $('cover-pos').value=pos;
+    if(tilt!=null) $('tilt-threshold').value=tilt;
+    if(slat!=null) $('slat-transmission').value=slat;
+    $('v-cover').textContent=parseInt($('cover-pos').value)+' %';
+    $('v-tilt').textContent=parseInt($('tilt-threshold').value)+' %';
+    $('v-slat').textContent=parseInt($('slat-transmission').value)+' %';
+  }catch(e){}
+}
+loadStore();
 
 $('ha-fetch').addEventListener('click', async ()=>{
   const btn=$('ha-fetch');

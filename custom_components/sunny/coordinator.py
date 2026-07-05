@@ -81,6 +81,8 @@ class SunnyCoordinator(DataUpdateCoordinator):
             )
             data["cover_entity"] = win.get("cover_entity")
             data["zone_entity"] = win.get("zone_entity")
+            data["tilt_threshold"] = win.get("tilt_threshold", 5.0)
+            data["slat_transmission"] = win.get("slat_transmission", 5.0)
             strategy_name = win.get("strategy", "block_all")
             strategy = get_strategy(strategy_name)
             data["strategy"] = strategy_name

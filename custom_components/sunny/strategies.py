@@ -15,7 +15,13 @@ class BaseStrategy(ABC):
 
 
 def _lit_at_cover_position(data: dict, cover_pos: float) -> float:
-    """Calcule le pourcentage d'éclairement si le store est à cover_pos %."""
+    """Calcule le pourcentage d'éclairement si le store est à cover_pos %.
+    
+    Modèle avec phase tilt : les premiers pourcentages d'ouverture basculent
+    les lamelles sans lever le bas du store, laissant passer une fraction de
+    lumière filtrée (sans éblouissement). Au-delà du seuil tilt_threshold,
+    le bas du store se lève physiquement.
+    """
     if data.get("behind") or data.get("screen_blocks_all"):
         return 0.0
     Hw = data.get("window_height", 1.0)
@@ -23,14 +29,47 @@ def _lit_at_cover_position(data: dict, cover_pos: float) -> float:
     d_vert = data.get("d_vert", 0.0)
     y_ombre = data.get("y_ombre", 0.0)
     d_lat = data.get("d_lat", 0.0)
-
-    y_cover = Hw * (1.0 - cover_pos / 100.0)
-    lit_top = max(d_vert, y_cover)
-    lit_bottom = Hw - y_ombre
-    lit_h = max(0.0, lit_bottom - lit_top)
-    lit_w = max(0.0, W - d_lat)
+    tilt_threshold = data.get("tilt_threshold", 5.0)
+    slat_transmission = data.get("slat_transmission", 5.0)
     area = W * Hw
-    return (lit_w * lit_h / area * 100.0) if area > 0 else 0.0
+    if area <= 0:
+        return 0.0
+
+    lit_w = max(0.0, W - d_lat)
+
+    if tilt_threshold <= 0 or tilt_threshold >= 100:
+        # Comportement original sans phase tilt
+        y_cover = Hw * (1.0 - cover_pos / 100.0)
+        lit_top = max(d_vert, y_cover)
+        lit_bottom = Hw - y_ombre
+        lit_h = max(0.0, lit_bottom - lit_top)
+        return (lit_w * lit_h / area * 100.0)
+
+    if cover_pos <= tilt_threshold:
+        # Phase tilt : store complètement baissé, lamelles basculent progressivement
+        transmission = (cover_pos / tilt_threshold) * (slat_transmission / 100.0)
+        base_lit_top = d_vert
+        base_lit_bottom = Hw - y_ombre
+        base_lit_h = max(0.0, base_lit_bottom - base_lit_top)
+        return (lit_w * base_lit_h * transmission / area * 100.0)
+    else:
+        # Phase levée : lamelles ouvertes, le bas du store se lève
+        effective_pos = (cover_pos - tilt_threshold) / (100.0 - tilt_threshold) * 100.0
+        y_cover = Hw * (1.0 - effective_pos / 100.0)
+
+        # Zone dégagée (sous le store) : plein soleil direct
+        clear_top = max(d_vert, y_cover)
+        clear_bottom = Hw - y_ombre
+        clear_h = max(0.0, clear_bottom - clear_top)
+        clear_lit = lit_w * clear_h
+
+        # Zone couverte par le store (lamelles ouvertes) : lumière filtrée
+        slat_top = d_vert
+        slat_bottom = min(y_cover, Hw - y_ombre)
+        slat_h = max(0.0, slat_bottom - slat_top)
+        slat_lit = lit_w * slat_h * (slat_transmission / 100.0)
+
+        return ((clear_lit + slat_lit) / area * 100.0)
 
 
 def search_cover_position(data: dict, target_pct: float) -> int:

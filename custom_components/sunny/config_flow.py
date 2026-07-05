@@ -24,6 +24,8 @@ from .const import (
     CONF_WALL_THICKNESS,
     CONF_SCREEN_DISTANCE,
     CONF_SCREEN_HEIGHT,
+    CONF_TILT_THRESHOLD,
+    CONF_SLAT_TRANSMISSION,
     CONF_ALTITUDE,
     CONF_GROUND_ALTITUDE,
     CONF_ZONE_ENTITY,
@@ -38,6 +40,8 @@ from .const import (
     DEFAULT_WALL_THICKNESS,
     DEFAULT_SCREEN_DISTANCE,
     DEFAULT_SCREEN_HEIGHT,
+    DEFAULT_TILT_THRESHOLD,
+    DEFAULT_SLAT_TRANSMISSION,
     DEFAULT_ALTITUDE,
     DEFAULT_GROUND_ALTITUDE,
     DEFAULT_STRATEGY,
@@ -62,6 +66,10 @@ WINDOW_SCHEMA = vol.Schema({
         vol.All(vol.Coerce(float), vol.Range(min=0.0, max=20.0)),
     vol.Optional(CONF_SCREEN_HEIGHT, default=DEFAULT_SCREEN_HEIGHT):
         vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
+    vol.Required(CONF_TILT_THRESHOLD, default=DEFAULT_TILT_THRESHOLD):
+        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
+    vol.Required(CONF_SLAT_TRANSMISSION, default=DEFAULT_SLAT_TRANSMISSION):
+        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
     vol.Required(CONF_ALTITUDE, default=DEFAULT_ALTITUDE):
         vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
     vol.Required(CONF_GROUND_ALTITUDE, default=DEFAULT_GROUND_ALTITUDE):
@@ -232,6 +240,10 @@ class SunnyOptionsFlow(OptionsFlow):
                     vol.All(vol.Coerce(float), vol.Range(min=0.0, max=20.0)),
                 vol.Optional(CONF_SCREEN_HEIGHT, default=with_defaults.get(CONF_SCREEN_HEIGHT, DEFAULT_SCREEN_HEIGHT)):
                     vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
+                vol.Required(CONF_TILT_THRESHOLD, default=with_defaults.get(CONF_TILT_THRESHOLD, DEFAULT_TILT_THRESHOLD)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
+                vol.Required(CONF_SLAT_TRANSMISSION, default=with_defaults.get(CONF_SLAT_TRANSMISSION, DEFAULT_SLAT_TRANSMISSION)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
                 vol.Required(CONF_ALTITUDE, default=with_defaults.get(CONF_ALTITUDE, DEFAULT_ALTITUDE)):
                     vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
                 vol.Required(CONF_GROUND_ALTITUDE, default=with_defaults.get(CONF_GROUND_ALTITUDE, DEFAULT_GROUND_ALTITUDE)):

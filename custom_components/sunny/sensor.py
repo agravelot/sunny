@@ -209,6 +209,8 @@ class SunnyPositionSensor(SunnyBaseSensor):
         self._attr_native_value = data.get("desired_position", 100)
         self._attr_extra_state_attributes = {
             "cover_entity": data.get("cover_entity"),
+            "tilt_threshold": data.get("tilt_threshold"),
+            "slat_transmission": data.get("slat_transmission"),
         }
         self.async_write_ha_state()
 
