@@ -7,7 +7,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import DOMAIN, DEFAULT_REFRESH_INTERVAL
+from .const import (
+    DOMAIN,
+    DEFAULT_REFRESH_INTERVAL,
+    DEFAULT_STRATEGY_HIGH,
+    DEFAULT_STRATEGY_LOW,
+    DEFAULT_TEMP_THRESHOLD,
+    DEFAULT_LIT_THRESHOLD,
+    DEFAULT_TARGET_ILLUMINATION,
+)
 from .solar_math import compute_window
 from .strategies import get_strategy
 
@@ -90,6 +98,11 @@ class SunnyCoordinator(DataUpdateCoordinator):
             data["zone_entity"] = win.get("zone_entity")
             data["tilt_threshold"] = win.get("tilt_threshold", 5.0)
             data["slat_transmission"] = win.get("slat_transmission", 5.0)
+            data["strategy_high"] = win.get("strategy_high", DEFAULT_STRATEGY_HIGH)
+            data["strategy_low"] = win.get("strategy_low", DEFAULT_STRATEGY_LOW)
+            data["temp_threshold"] = win.get("temp_threshold", DEFAULT_TEMP_THRESHOLD)
+            data["lit_threshold"] = win.get("lit_threshold", DEFAULT_LIT_THRESHOLD)
+            data["target_illumination"] = win.get("target_illumination", DEFAULT_TARGET_ILLUMINATION)
             strategy_name = win.get("strategy", "block_all")
             strategy = get_strategy(strategy_name)
             data["strategy"] = strategy_name

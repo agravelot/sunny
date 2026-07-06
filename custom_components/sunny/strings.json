@@ -24,6 +24,11 @@
           "altitude": "Hauteur au-dessus du sol (m)",
           "ground_altitude": "Altitude du sol / niveau de la mer (m)",
           "strategy": "Stratégie de pilotage",
+          "strategy_high": "Seuil haut (fermeture)",
+          "strategy_low": "Seuil bas (ouverture)",
+          "temp_threshold": "Seuil température (°C)",
+          "lit_threshold": "Seuil ensoleillement (%)",
+          "target_illumination": "Cible d'ensoleillement (%)",
           "zone_entity": "Entité zone (position géographique)",
           "latitude": "Latitude (optionnelle, défaut HA)",
           "longitude": "Longitude (optionnelle, défaut HA)"
@@ -62,6 +67,11 @@
           "altitude": "Hauteur au-dessus du sol (m)",
           "ground_altitude": "Altitude du sol / niveau de la mer (m)",
           "strategy": "Stratégie de pilotage",
+          "strategy_high": "Seuil haut (fermeture)",
+          "strategy_low": "Seuil bas (ouverture)",
+          "temp_threshold": "Seuil température (°C)",
+          "lit_threshold": "Seuil ensoleillement (%)",
+          "target_illumination": "Cible d'ensoleillement (%)",
           "zone_entity": "Entité zone (position géographique)",
           "latitude": "Latitude",
           "longitude": "Longitude"
@@ -80,6 +90,12 @@
           "screen_height": "Hauteur du mur écran (m)",
           "altitude": "Hauteur au-dessus du sol (m)",
           "ground_altitude": "Altitude du sol / niveau de la mer (m)",
+          "strategy": "Stratégie de pilotage",
+          "strategy_high": "Seuil haut (fermeture)",
+          "strategy_low": "Seuil bas (ouverture)",
+          "temp_threshold": "Seuil température (°C)",
+          "lit_threshold": "Seuil ensoleillement (%)",
+          "target_illumination": "Cible d'ensoleillement (%)",
           "latitude": "Latitude",
           "longitude": "Longitude"
         }

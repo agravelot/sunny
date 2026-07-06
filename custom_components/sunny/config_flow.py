@@ -33,6 +33,11 @@ from .const import (
     CONF_LATITUDE,
     CONF_LONGITUDE,
     CONF_REFRESH_INTERVAL,
+    CONF_STRATEGY_HIGH,
+    CONF_STRATEGY_LOW,
+    CONF_TEMP_THRESHOLD,
+    CONF_LIT_THRESHOLD,
+    CONF_TARGET_ILLUMINATION,
     DEFAULT_NAME,
     DEFAULT_ORIENTATION,
     DEFAULT_WIDTH,
@@ -46,6 +51,11 @@ from .const import (
     DEFAULT_GROUND_ALTITUDE,
     DEFAULT_STRATEGY,
     DEFAULT_REFRESH_INTERVAL,
+    DEFAULT_STRATEGY_HIGH,
+    DEFAULT_STRATEGY_LOW,
+    DEFAULT_TEMP_THRESHOLD,
+    DEFAULT_LIT_THRESHOLD,
+    DEFAULT_TARGET_ILLUMINATION,
 )
 from .strategies import STRATEGY_OPTIONS
 
@@ -75,6 +85,16 @@ WINDOW_SCHEMA = vol.Schema({
     vol.Required(CONF_GROUND_ALTITUDE, default=DEFAULT_GROUND_ALTITUDE):
         vol.All(vol.Coerce(float), vol.Range(min=0.0, max=3000.0)),
     vol.Required(CONF_STRATEGY, default=DEFAULT_STRATEGY): vol.In(STRATEGY_OPTIONS),
+    vol.Optional(CONF_STRATEGY_HIGH, default=DEFAULT_STRATEGY_HIGH):
+        vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+    vol.Optional(CONF_STRATEGY_LOW, default=DEFAULT_STRATEGY_LOW):
+        vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+    vol.Optional(CONF_TEMP_THRESHOLD, default=DEFAULT_TEMP_THRESHOLD):
+        vol.All(vol.Coerce(float), vol.Range(min=0, max=50)),
+    vol.Optional(CONF_LIT_THRESHOLD, default=DEFAULT_LIT_THRESHOLD):
+        vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+    vol.Optional(CONF_TARGET_ILLUMINATION, default=DEFAULT_TARGET_ILLUMINATION):
+        vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
     vol.Optional(CONF_ZONE_ENTITY): EntitySelector(
         EntitySelectorConfig(domain="zone")
     ),
@@ -256,6 +276,16 @@ class SunnyOptionsFlow(OptionsFlow):
                 vol.Required(CONF_GROUND_ALTITUDE, default=with_defaults.get(CONF_GROUND_ALTITUDE, DEFAULT_GROUND_ALTITUDE)):
                     vol.All(vol.Coerce(float), vol.Range(min=0.0, max=3000.0)),
                 vol.Required(CONF_STRATEGY, default=with_defaults.get(CONF_STRATEGY, DEFAULT_STRATEGY)): vol.In(STRATEGY_OPTIONS),
+                vol.Optional(CONF_STRATEGY_HIGH, default=with_defaults.get(CONF_STRATEGY_HIGH, DEFAULT_STRATEGY_HIGH)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+                vol.Optional(CONF_STRATEGY_LOW, default=with_defaults.get(CONF_STRATEGY_LOW, DEFAULT_STRATEGY_LOW)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+                vol.Optional(CONF_TEMP_THRESHOLD, default=with_defaults.get(CONF_TEMP_THRESHOLD, DEFAULT_TEMP_THRESHOLD)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0, max=50)),
+                vol.Optional(CONF_LIT_THRESHOLD, default=with_defaults.get(CONF_LIT_THRESHOLD, DEFAULT_LIT_THRESHOLD)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+                vol.Optional(CONF_TARGET_ILLUMINATION, default=with_defaults.get(CONF_TARGET_ILLUMINATION, DEFAULT_TARGET_ILLUMINATION)):
+                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
                 vol.Optional(CONF_ZONE_ENTITY, default=with_defaults.get(CONF_ZONE_ENTITY)):
                     EntitySelector(EntitySelectorConfig(domain="zone")),
                 vol.Optional(CONF_LATITUDE, default=with_defaults.get(CONF_LATITUDE)):

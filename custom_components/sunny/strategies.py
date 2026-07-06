@@ -166,17 +166,16 @@ class ThresholdStrategy(BaseStrategy):
     name = "threshold"
     label = "Seuil (ferme si ensoleillé, ouvre si ombre)"
 
-    HIGH = 50
-    LOW = 20
-
     def compute_position(self, data: dict) -> int:
+        high = data.get("strategy_high", 50.0)
+        low = data.get("strategy_low", 20.0)
         lit_pct = data.get("lit_pct", 0)
-        if lit_pct >= self.HIGH:
+        if lit_pct >= high:
             return 0   # fermé
-        if lit_pct <= self.LOW:
+        if lit_pct <= low:
             return 100  # ouvert
         # zone intermédiaire : interpolation linéaire
-        ratio = (lit_pct - self.LOW) / (self.HIGH - self.LOW)
+        ratio = (lit_pct - low) / (high - low)
         return round(100.0 - ratio * 100.0)
 
 
@@ -186,13 +185,12 @@ class TemperatureGuardStrategy(BaseStrategy):
     name = "temperature_guard"
     label = "Garde-fou température (chaud+soleil=fermé)"
 
-    TEMP_THRESHOLD = 28.0
-    LIT_THRESHOLD = 20.0
-
     def compute_position(self, data: dict) -> int:
         temp = data.get("temperature")
         lit_pct = data.get("lit_pct", 0)
-        if temp is not None and temp >= self.TEMP_THRESHOLD and lit_pct >= self.LIT_THRESHOLD:
+        temp_threshold = data.get("temp_threshold", 28.0)
+        lit_threshold = data.get("lit_threshold", 20.0)
+        if temp is not None and temp >= temp_threshold and lit_pct >= lit_threshold:
             y_ombre = data.get("y_ombre", 0.0)
             Hw = data.get("window_height", 1.0)
             if Hw > 0 and y_ombre < Hw:
@@ -219,12 +217,11 @@ class TargetIlluminationStrategy(BaseStrategy):
     """Cible d'ensoleillement précis : maintient un % d'éclairement donné."""
 
     name = "target_illumination"
-    label = "Cible d'ensoleillement (30% par défaut)"
-
-    TARGET_PCT = 30.0
+    label = "Cible d'ensoleillement"
 
     def compute_position(self, data: dict) -> int:
-        return search_cover_position(data, self.TARGET_PCT)
+        target = data.get("target_illumination", 30.0)
+        return search_cover_position(data, target)
 
 
 # ---------------------------------------------------------------------------
