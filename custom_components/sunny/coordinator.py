@@ -73,12 +73,19 @@ class SunnyCoordinator(DataUpdateCoordinator):
             alt = win.get("altitude", 10)
             ground_alt = win.get("ground_altitude", 208)
 
-            data = compute_window(
-                h=h, As=As, An=orientation,
-                W=width, Hw=height, e=wall,
-                D=sd, Hm=sh, altitude=alt,
-                ground_altitude=ground_alt,
-            )
+            try:
+                data = compute_window(
+                    h=h, As=As, An=orientation,
+                    W=width, Hw=height, e=wall,
+                    D=sd, Hm=sh, altitude=alt,
+                    ground_altitude=ground_alt,
+                )
+            except Exception:
+                _LOGGER.exception(
+                    "Erreur lors du calcul solaire pour la fenêtre '%s'",
+                    name,
+                )
+                continue
             data["cover_entity"] = win.get("cover_entity")
             data["zone_entity"] = win.get("zone_entity")
             data["tilt_threshold"] = win.get("tilt_threshold", 5.0)
