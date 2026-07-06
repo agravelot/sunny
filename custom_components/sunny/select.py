@@ -4,7 +4,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity_registry import async_track_entity_registry_updated_event
+from homeassistant.helpers.event import async_track_entity_registry_updated_event
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
