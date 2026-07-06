@@ -97,7 +97,10 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
-        self.data: dict[str, Any] = {CONF_WINDOWS: []}
+        self.data: dict[str, Any] = {
+            CONF_WINDOWS: [],
+            CONF_REFRESH_INTERVAL: DEFAULT_REFRESH_INTERVAL,
+        }
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
@@ -144,8 +147,12 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_window()
             return self.async_create_entry(
                 title="Sunny",
-                data={CONF_WEATHER_ENTITY: self.data[CONF_WEATHER_ENTITY]},
-                options={CONF_WINDOWS: self.data[CONF_WINDOWS]},
+                data={},
+                options={
+                    CONF_WEATHER_ENTITY: self.data.get(CONF_WEATHER_ENTITY, ""),
+                    CONF_WINDOWS: self.data[CONF_WINDOWS],
+                    CONF_REFRESH_INTERVAL: self.data.get(CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL),
+                },
             )
 
         return self.async_show_form(
