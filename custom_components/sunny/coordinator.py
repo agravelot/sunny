@@ -48,7 +48,10 @@ class SunnyCoordinator(DataUpdateCoordinator):
             return {}
 
         weather_data = {"cloud_coverage": None, "weather_condition": None, "temperature": None}
-        weather_entity = self.entry.options.get("weather_entity")
+        weather_entity = (
+            self.entry.options.get("weather_entity")
+            or self.entry.data.get("weather_entity")
+        )
         if weather_entity:
             weather = self.hass.states.get(weather_entity)
             if weather is None:
