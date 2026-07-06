@@ -138,6 +138,14 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             lat = user_input.pop(CONF_LATITUDE, None)
             lon = user_input.pop(CONF_LONGITUDE, None)
+            zone_entity = user_input.get(CONF_ZONE_ENTITY)
+            if zone_entity and (lat is None or lon is None):
+                zone = self.hass.states.get(zone_entity)
+                if zone:
+                    if lat is None:
+                        lat = zone.attributes.get("latitude")
+                    if lon is None:
+                        lon = zone.attributes.get("longitude")
             win: dict[str, Any] = dict(user_input)
             if lat is not None:
                 win[CONF_LATITUDE] = lat
@@ -304,6 +312,14 @@ class SunnyOptionsFlow(OptionsFlow):
             win = dict(user_input)
             lat = win.pop(CONF_LATITUDE, None)
             lon = win.pop(CONF_LONGITUDE, None)
+            zone_entity = win.get(CONF_ZONE_ENTITY)
+            if zone_entity and (lat is None or lon is None):
+                zone = self.hass.states.get(zone_entity)
+                if zone:
+                    if lat is None:
+                        lat = zone.attributes.get("latitude")
+                    if lon is None:
+                        lon = zone.attributes.get("longitude")
             if lat is not None:
                 win[CONF_LATITUDE] = lat
             if lon is not None:
