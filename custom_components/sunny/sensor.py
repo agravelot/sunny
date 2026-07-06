@@ -11,6 +11,7 @@ from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_registry import async_track_entity_registry_updated_event
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -37,26 +38,19 @@ async def resolve_cover_device(
     entry: ConfigEntry,
     cover_entity_id: str,
     window_name: str,
-) -> DeviceInfo:
-    """Résout le DeviceInfo en se liant au device du cover s'il existe."""
+) -> DeviceInfo | None:
+    """Résout le DeviceInfo en se liant au device du cover s'il existe.
+
+    Retourne None si le cover n'est pas encore dans l'entity_registry
+    (la création des entités Sunny sera différée).
+    """
     ent_reg = er.async_get(hass)
-    dev_reg = dr.async_get(hass)
 
     entity_entry = ent_reg.async_get(cover_entity_id)
     if not entity_entry:
-        state = hass.states.get(cover_entity_id)
-        if state:
-            _LOGGER.info(
-                "Entité '%s' trouvée dans hass.states mais absente de l'entity_registry "
-                "(intégration probablement en cours de chargement)",
-                cover_entity_id,
-            )
-        else:
-            _LOGGER.info(
-                "Entité '%s' introuvable (ni registry, ni states)",
-                cover_entity_id,
-            )
-        return fallback_device_info(entry, window_name)
+        return None
+
+    dev_reg = dr.async_get(hass)
 
     if not entity_entry.device_id:
         _LOGGER.info(
@@ -82,19 +76,26 @@ async def resolve_cover_device(
         )
         return fallback_device_info(entry, window_name)
 
-    _LOGGER.info(
-        "Device trouvé pour '%s' : '%s', identifiers=%s",
-        cover_entity_id,
-        device.name,
-        device.identifiers,
-    )
-
     dev_reg.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers=device.identifiers,
     )
 
     return DeviceInfo(identifiers=device.identifiers)
+
+
+def _create_window_entities(
+    coordinator: SunnyCoordinator,
+    window_name: str,
+    device_info: DeviceInfo,
+) -> list[SunnyBaseSensor]:
+    """Crée les 4 entités capteur pour une fenêtre."""
+    return [
+        SunnySunSensor(coordinator, window_name, device_info),
+        SunnyPositionSensor(coordinator, window_name, device_info),
+        SunnyStrategySensor(coordinator, window_name, device_info),
+        SunnyCloudSensor(coordinator, window_name, device_info),
+    ]
 
 
 async def async_setup_entry(
@@ -106,21 +107,39 @@ async def async_setup_entry(
     windows = entry.options.get("windows", [])
 
     entities = []
+    pending_covers: set[str] = set()
+
     for win in windows:
         name = win["name"]
         cover_entity_id = win.get("cover_entity", "")
+
         if cover_entity_id:
             device_info = await resolve_cover_device(
                 hass, entry, cover_entity_id, name
             )
+            if device_info is None:
+                pending_covers.add(cover_entity_id)
+                continue
         else:
             device_info = fallback_device_info(entry, name)
-        entities.extend([
-            SunnySunSensor(coordinator, name, device_info),
-            SunnyPositionSensor(coordinator, name, device_info),
-            SunnyStrategySensor(coordinator, name, device_info),
-            SunnyCloudSensor(coordinator, name, device_info),
-        ])
+
+        entities.extend(_create_window_entities(coordinator, name, device_info))
+
+    if pending_covers:
+        @callback
+        def _on_cover_registered(event):
+            entity_id = event.data.get("entity_id")
+            if entity_id in pending_covers:
+                pending_covers.discard(entity_id)
+                hass.async_create_task(
+                    hass.config_entries.async_reload(entry.entry_id)
+                )
+
+        entry.async_on_unload(
+            async_track_entity_registry_updated_event(
+                hass, set(pending_covers), _on_cover_registered
+            )
+        )
 
     async_add_entities(entities)
 

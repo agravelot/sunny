@@ -2,8 +2,9 @@
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_registry import async_track_entity_registry_updated_event
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -21,17 +22,40 @@ async def async_setup_entry(
     windows = entry.options.get("windows", [])
 
     entities = []
+    pending_covers: set[str] = set()
+
     for idx, win in enumerate(windows):
         name = win["name"]
         cover_entity_id = win.get("cover_entity", "")
+
         if cover_entity_id:
             device_info = await resolve_cover_device(
                 hass, entry, cover_entity_id, name
             )
+            if device_info is None:
+                pending_covers.add(cover_entity_id)
+                continue
         else:
             device_info = fallback_device_info(entry, name)
+
         entities.append(
             SunnyStrategySelect(coordinator, name, idx, device_info)
+        )
+
+    if pending_covers:
+        @callback
+        def _on_cover_registered(event):
+            entity_id = event.data.get("entity_id")
+            if entity_id in pending_covers:
+                pending_covers.discard(entity_id)
+                hass.async_create_task(
+                    hass.config_entries.async_reload(entry.entry_id)
+                )
+
+        entry.async_on_unload(
+            async_track_entity_registry_updated_event(
+                hass, set(pending_covers), _on_cover_registered
+            )
         )
 
     async_add_entities(entities)
