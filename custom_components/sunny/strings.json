@@ -32,9 +32,7 @@
           "temp_threshold": "Seuil température (°C)",
           "lit_threshold": "Seuil ensoleillement (%)",
           "target_illumination": "Cible d'ensoleillement (%)",
-          "zone_entity": "Entité zone (position géographique)",
-          "latitude": "Latitude (optionnelle, défaut HA)",
-          "longitude": "Longitude (optionnelle, défaut HA)"
+          "zone_entity": "Entité zone (position géographique)"
         }
       },
       "finish": {
@@ -78,9 +76,7 @@
           "temp_threshold": "Seuil température (°C)",
           "lit_threshold": "Seuil ensoleillement (%)",
           "target_illumination": "Cible d'ensoleillement (%)",
-          "zone_entity": "Entité zone (position géographique)",
-          "latitude": "Latitude",
-          "longitude": "Longitude"
+          "zone_entity": "Entité zone (position géographique)"
         }
       },
       "add_window": {
@@ -101,9 +97,7 @@
           "strategy_low": "Seuil bas (ouverture)",
           "temp_threshold": "Seuil température (°C)",
           "lit_threshold": "Seuil ensoleillement (%)",
-          "target_illumination": "Cible d'ensoleillement (%)",
-          "latitude": "Latitude",
-          "longitude": "Longitude"
+          "target_illumination": "Cible d'ensoleillement (%)"
         }
       },
       "weather": {

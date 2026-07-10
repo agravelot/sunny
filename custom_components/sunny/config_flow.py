@@ -33,8 +33,6 @@ from .const import (
     CONF_GROUND_ALTITUDE,
     CONF_ZONE_ENTITY,
     CONF_STRATEGY,
-    CONF_LATITUDE,
-    CONF_LONGITUDE,
     CONF_REFRESH_INTERVAL,
     CONF_STRATEGY_HIGH,
     CONF_STRATEGY_LOW,
@@ -123,10 +121,6 @@ def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
         vol.Optional(CONF_ZONE_ENTITY, default=defaults.get(CONF_ZONE_ENTITY)):
             EntitySelector(EntitySelectorConfig(domain="zone")),
-        vol.Optional(CONF_LATITUDE, default=defaults.get(CONF_LATITUDE)):
-            vol.All(vol.Coerce(float), vol.Range(min=-66, max=66)),
-        vol.Optional(CONF_LONGITUDE, default=defaults.get(CONF_LONGITUDE)):
-            vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
     })
 
 
@@ -190,17 +184,6 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            lat = user_input.pop(CONF_LATITUDE, None)
-            lon = user_input.pop(CONF_LONGITUDE, None)
-            zone_entity = user_input.get(CONF_ZONE_ENTITY)
-            if zone_entity and (lat is None or lon is None):
-                zone = self.hass.states.get(zone_entity)
-                if zone:
-                    if lat is None:
-                        lat = zone.attributes.get("latitude")
-                    if lon is None:
-                        lon = zone.attributes.get("longitude")
-
             name = user_input.get(CONF_WINDOW_NAME, DEFAULT_NAME)
             cover_entity_id = user_input.get(CONF_COVER_ENTITY, "")
 
@@ -212,10 +195,6 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_WINDOW_NAME] = "duplicate_name"
             else:
                 win: dict[str, Any] = dict(user_input)
-                if lat is not None:
-                    win[CONF_LATITUDE] = lat
-                if lon is not None:
-                    win[CONF_LONGITUDE] = lon
                 win[CONF_WINDOW_ID] = win.get(CONF_COVER_ENTITY, "")
                 self.data[CONF_WINDOWS].append(win)
                 return await self.async_step_finish()
@@ -360,20 +339,6 @@ class SunnyOptionsFlow(OptionsFlow):
                 errors[CONF_WINDOW_NAME] = "duplicate_name"
             else:
                 win = dict(user_input)
-                lat = win.pop(CONF_LATITUDE, None)
-                lon = win.pop(CONF_LONGITUDE, None)
-                zone_entity = win.get(CONF_ZONE_ENTITY)
-                if zone_entity and (lat is None or lon is None):
-                    zone = self.hass.states.get(zone_entity)
-                    if zone:
-                        if lat is None:
-                            lat = zone.attributes.get("latitude")
-                        if lon is None:
-                            lon = zone.attributes.get("longitude")
-                if lat is not None:
-                    win[CONF_LATITUDE] = lat
-                if lon is not None:
-                    win[CONF_LONGITUDE] = lon
                 win[CONF_WINDOW_ID] = win.get(CONF_COVER_ENTITY, "")
                 self.data[CONF_WINDOWS].append(win)
                 return await self.async_step_init()
