@@ -78,7 +78,7 @@ class SunnyStrategySelect(CoordinatorEntity, SelectEntity):
         self._window_name = window_name
         self._window_idx = window_idx
         self._attr_unique_id = (
-            f"{coordinator.entry.entry_id}_{window_name}_strategy_select"
+            f"{coordinator.entry.entry_id}_{window_idx}_{window_name}_strategy_select"
         )
         self._attr_device_info = device_info
         self._attr_name = f"{window_name} Choix stratégie"

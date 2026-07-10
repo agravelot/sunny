@@ -1,6 +1,9 @@
 {
   "title": "Sunny",
   "config": {
+    "error": {
+      "duplicate_name": "Une fenêtre avec ce nom existe déjà"
+    },
     "step": {
       "user": {
         "title": "Configuration Sunny",
@@ -44,6 +47,9 @@
     }
   },
   "options": {
+    "error": {
+      "duplicate_name": "Une fenêtre avec ce nom existe déjà"
+    },
     "step": {
       "init": {
         "title": "Gérer les fenêtres",

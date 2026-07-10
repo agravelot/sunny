@@ -6,7 +6,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.config_entries import OptionsFlow
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
     EntitySelector,
     EntitySelectorConfig,
@@ -59,48 +59,72 @@ from .const import (
 )
 from .strategies import STRATEGY_OPTIONS
 
-WINDOW_SCHEMA = vol.Schema({
-    vol.Required(CONF_WINDOW_NAME, default=DEFAULT_NAME): str,
-    vol.Required(CONF_COVER_ENTITY): EntitySelector(
-        EntitySelectorConfig(domain="cover")
-    ),
-    vol.Required(CONF_ORIENTATION, default=DEFAULT_ORIENTATION):
-        vol.All(vol.Coerce(float), vol.Range(min=0, max=359)),
-    vol.Required(CONF_WIDTH, default=DEFAULT_WIDTH):
-        vol.All(vol.Coerce(float), vol.Range(min=0.4, max=4.0)),
-    vol.Required(CONF_HEIGHT, default=DEFAULT_HEIGHT):
-        vol.All(vol.Coerce(float), vol.Range(min=0.4, max=3.0)),
-    vol.Required(CONF_WALL_THICKNESS, default=DEFAULT_WALL_THICKNESS):
-        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.8)),
-    vol.Optional(CONF_SCREEN_DISTANCE, default=DEFAULT_SCREEN_DISTANCE):
-        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=20.0)),
-    vol.Optional(CONF_SCREEN_HEIGHT, default=DEFAULT_SCREEN_HEIGHT):
-        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
-    vol.Required(CONF_TILT_THRESHOLD, default=DEFAULT_TILT_THRESHOLD):
-        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
-    vol.Required(CONF_SLAT_TRANSMISSION, default=DEFAULT_SLAT_TRANSMISSION):
-        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
-    vol.Required(CONF_ALTITUDE, default=DEFAULT_ALTITUDE):
-        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
-    vol.Required(CONF_GROUND_ALTITUDE, default=DEFAULT_GROUND_ALTITUDE):
-        vol.All(vol.Coerce(float), vol.Range(min=0.0, max=3000.0)),
-    vol.Required(CONF_STRATEGY, default=DEFAULT_STRATEGY): vol.In(STRATEGY_OPTIONS),
-    vol.Optional(CONF_STRATEGY_HIGH, default=DEFAULT_STRATEGY_HIGH):
-        vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-    vol.Optional(CONF_STRATEGY_LOW, default=DEFAULT_STRATEGY_LOW):
-        vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-    vol.Optional(CONF_TEMP_THRESHOLD, default=DEFAULT_TEMP_THRESHOLD):
-        vol.All(vol.Coerce(float), vol.Range(min=0, max=50)),
-    vol.Optional(CONF_LIT_THRESHOLD, default=DEFAULT_LIT_THRESHOLD):
-        vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-    vol.Optional(CONF_TARGET_ILLUMINATION, default=DEFAULT_TARGET_ILLUMINATION):
-        vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-    vol.Optional(CONF_ZONE_ENTITY): EntitySelector(
-        EntitySelectorConfig(domain="zone")
-    ),
-    vol.Optional(CONF_LATITUDE): vol.All(vol.Coerce(float), vol.Range(min=-66, max=66)),
-    vol.Optional(CONF_LONGITUDE): vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
-})
+
+def _get_cover_friendly_name(hass: HomeAssistant, cover_entity_id: str) -> str:
+    state = hass.states.get(cover_entity_id)
+    if state and state.attributes.get("friendly_name"):
+        return state.attributes["friendly_name"]
+    return DEFAULT_NAME
+
+
+def _is_window_name_duplicate(
+    windows: list[dict[str, Any]],
+    name: str,
+    exclude_idx: int | None = None,
+) -> bool:
+    for i, win in enumerate(windows):
+        if exclude_idx is not None and i == exclude_idx:
+            continue
+        if win.get(CONF_WINDOW_NAME) == name:
+            return True
+    return False
+
+
+def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    if defaults is None:
+        defaults = {}
+    return vol.Schema({
+        vol.Required(CONF_WINDOW_NAME, default=defaults.get(CONF_WINDOW_NAME, DEFAULT_NAME)): str,
+        vol.Required(CONF_COVER_ENTITY, default=defaults.get(CONF_COVER_ENTITY)):
+            EntitySelector(EntitySelectorConfig(domain="cover")),
+        vol.Required(CONF_ORIENTATION, default=defaults.get(CONF_ORIENTATION, DEFAULT_ORIENTATION)):
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=359)),
+        vol.Required(CONF_WIDTH, default=defaults.get(CONF_WIDTH, DEFAULT_WIDTH)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.4, max=4.0)),
+        vol.Required(CONF_HEIGHT, default=defaults.get(CONF_HEIGHT, DEFAULT_HEIGHT)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.4, max=3.0)),
+        vol.Required(CONF_WALL_THICKNESS, default=defaults.get(CONF_WALL_THICKNESS, DEFAULT_WALL_THICKNESS)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.8)),
+        vol.Optional(CONF_SCREEN_DISTANCE, default=defaults.get(CONF_SCREEN_DISTANCE, DEFAULT_SCREEN_DISTANCE)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=20.0)),
+        vol.Optional(CONF_SCREEN_HEIGHT, default=defaults.get(CONF_SCREEN_HEIGHT, DEFAULT_SCREEN_HEIGHT)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
+        vol.Required(CONF_TILT_THRESHOLD, default=defaults.get(CONF_TILT_THRESHOLD, DEFAULT_TILT_THRESHOLD)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
+        vol.Required(CONF_SLAT_TRANSMISSION, default=defaults.get(CONF_SLAT_TRANSMISSION, DEFAULT_SLAT_TRANSMISSION)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
+        vol.Required(CONF_ALTITUDE, default=defaults.get(CONF_ALTITUDE, DEFAULT_ALTITUDE)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
+        vol.Required(CONF_GROUND_ALTITUDE, default=defaults.get(CONF_GROUND_ALTITUDE, DEFAULT_GROUND_ALTITUDE)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=3000.0)),
+        vol.Required(CONF_STRATEGY, default=defaults.get(CONF_STRATEGY, DEFAULT_STRATEGY)): vol.In(STRATEGY_OPTIONS),
+        vol.Optional(CONF_STRATEGY_HIGH, default=defaults.get(CONF_STRATEGY_HIGH, DEFAULT_STRATEGY_HIGH)):
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+        vol.Optional(CONF_STRATEGY_LOW, default=defaults.get(CONF_STRATEGY_LOW, DEFAULT_STRATEGY_LOW)):
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+        vol.Optional(CONF_TEMP_THRESHOLD, default=defaults.get(CONF_TEMP_THRESHOLD, DEFAULT_TEMP_THRESHOLD)):
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=50)),
+        vol.Optional(CONF_LIT_THRESHOLD, default=defaults.get(CONF_LIT_THRESHOLD, DEFAULT_LIT_THRESHOLD)):
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+        vol.Optional(CONF_TARGET_ILLUMINATION, default=defaults.get(CONF_TARGET_ILLUMINATION, DEFAULT_TARGET_ILLUMINATION)):
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+        vol.Optional(CONF_ZONE_ENTITY, default=defaults.get(CONF_ZONE_ENTITY)):
+            EntitySelector(EntitySelectorConfig(domain="zone")),
+        vol.Optional(CONF_LATITUDE, default=defaults.get(CONF_LATITUDE)):
+            vol.All(vol.Coerce(float), vol.Range(min=-66, max=66)),
+        vol.Optional(CONF_LONGITUDE, default=defaults.get(CONF_LONGITUDE)):
+            vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
+    })
 
 
 def _build_weather_schema() -> vol.Schema:
@@ -133,7 +157,7 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_window(self, user_input: dict[str, Any] | None = None):
-        errors = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             lat = user_input.pop(CONF_LATITUDE, None)
@@ -146,15 +170,26 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         lat = zone.attributes.get("latitude")
                     if lon is None:
                         lon = zone.attributes.get("longitude")
-            win: dict[str, Any] = dict(user_input)
-            if lat is not None:
-                win[CONF_LATITUDE] = lat
-            if lon is not None:
-                win[CONF_LONGITUDE] = lon
-            self.data[CONF_WINDOWS].append(win)
-            return await self.async_step_finish()
 
-        schema = WINDOW_SCHEMA
+            name = user_input.get(CONF_WINDOW_NAME, DEFAULT_NAME)
+            cover_entity_id = user_input.get(CONF_COVER_ENTITY, "")
+
+            if name == DEFAULT_NAME and cover_entity_id:
+                name = _get_cover_friendly_name(self.hass, cover_entity_id)
+                user_input[CONF_WINDOW_NAME] = name
+
+            if _is_window_name_duplicate(self.data[CONF_WINDOWS], name):
+                errors[CONF_WINDOW_NAME] = "duplicate_name"
+            else:
+                win: dict[str, Any] = dict(user_input)
+                if lat is not None:
+                    win[CONF_LATITUDE] = lat
+                if lon is not None:
+                    win[CONF_LONGITUDE] = lon
+                self.data[CONF_WINDOWS].append(win)
+                return await self.async_step_finish()
+
+        schema = _build_window_schema(user_input or {})
         if self.data[CONF_WINDOWS]:
             schema = schema.extend({
                 vol.Optional("__add_another", default=True): bool,
@@ -249,6 +284,15 @@ class SunnyOptionsFlow(OptionsFlow):
 
     async def async_step_edit_window(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
+            name = user_input.get(CONF_WINDOW_NAME, DEFAULT_NAME)
+
+            if _is_window_name_duplicate(self.data[CONF_WINDOWS], name, exclude_idx=self._editing):
+                return self.async_show_form(
+                    step_id="edit_window",
+                    data_schema=_build_window_schema(user_input),
+                    errors={CONF_WINDOW_NAME: "duplicate_name"},
+                )
+
             self.data[CONF_WINDOWS][self._editing] = dict(user_input)
             self._editing = None
             return await self.async_step_init()
@@ -258,78 +302,47 @@ class SunnyOptionsFlow(OptionsFlow):
         else:
             current = {}
 
-        def _build_schema(with_defaults: dict) -> vol.Schema:
-            return vol.Schema({
-                vol.Required(CONF_WINDOW_NAME, default=with_defaults.get(CONF_WINDOW_NAME, DEFAULT_NAME)): str,
-                vol.Required(CONF_COVER_ENTITY, default=with_defaults.get(CONF_COVER_ENTITY, "")):
-                    EntitySelector(EntitySelectorConfig(domain="cover")),
-                vol.Required(CONF_ORIENTATION, default=with_defaults.get(CONF_ORIENTATION, DEFAULT_ORIENTATION)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0, max=359)),
-                vol.Required(CONF_WIDTH, default=with_defaults.get(CONF_WIDTH, DEFAULT_WIDTH)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.4, max=4.0)),
-                vol.Required(CONF_HEIGHT, default=with_defaults.get(CONF_HEIGHT, DEFAULT_HEIGHT)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.4, max=3.0)),
-                vol.Required(CONF_WALL_THICKNESS, default=with_defaults.get(CONF_WALL_THICKNESS, DEFAULT_WALL_THICKNESS)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.8)),
-                vol.Optional(CONF_SCREEN_DISTANCE, default=with_defaults.get(CONF_SCREEN_DISTANCE, DEFAULT_SCREEN_DISTANCE)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=20.0)),
-                vol.Optional(CONF_SCREEN_HEIGHT, default=with_defaults.get(CONF_SCREEN_HEIGHT, DEFAULT_SCREEN_HEIGHT)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
-                vol.Required(CONF_TILT_THRESHOLD, default=with_defaults.get(CONF_TILT_THRESHOLD, DEFAULT_TILT_THRESHOLD)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
-                vol.Required(CONF_SLAT_TRANSMISSION, default=with_defaults.get(CONF_SLAT_TRANSMISSION, DEFAULT_SLAT_TRANSMISSION)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
-                vol.Required(CONF_ALTITUDE, default=with_defaults.get(CONF_ALTITUDE, DEFAULT_ALTITUDE)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
-                vol.Required(CONF_GROUND_ALTITUDE, default=with_defaults.get(CONF_GROUND_ALTITUDE, DEFAULT_GROUND_ALTITUDE)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0.0, max=3000.0)),
-                vol.Required(CONF_STRATEGY, default=with_defaults.get(CONF_STRATEGY, DEFAULT_STRATEGY)): vol.In(STRATEGY_OPTIONS),
-                vol.Optional(CONF_STRATEGY_HIGH, default=with_defaults.get(CONF_STRATEGY_HIGH, DEFAULT_STRATEGY_HIGH)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-                vol.Optional(CONF_STRATEGY_LOW, default=with_defaults.get(CONF_STRATEGY_LOW, DEFAULT_STRATEGY_LOW)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-                vol.Optional(CONF_TEMP_THRESHOLD, default=with_defaults.get(CONF_TEMP_THRESHOLD, DEFAULT_TEMP_THRESHOLD)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0, max=50)),
-                vol.Optional(CONF_LIT_THRESHOLD, default=with_defaults.get(CONF_LIT_THRESHOLD, DEFAULT_LIT_THRESHOLD)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-                vol.Optional(CONF_TARGET_ILLUMINATION, default=with_defaults.get(CONF_TARGET_ILLUMINATION, DEFAULT_TARGET_ILLUMINATION)):
-                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-                vol.Optional(CONF_ZONE_ENTITY, default=with_defaults.get(CONF_ZONE_ENTITY)):
-                    EntitySelector(EntitySelectorConfig(domain="zone")),
-                vol.Optional(CONF_LATITUDE, default=with_defaults.get(CONF_LATITUDE)):
-                    vol.All(vol.Coerce(float), vol.Range(min=-66, max=66)),
-                vol.Optional(CONF_LONGITUDE, default=with_defaults.get(CONF_LONGITUDE)):
-                    vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
-            })
-
         return self.async_show_form(
             step_id="edit_window",
-            data_schema=_build_schema(current),
+            data_schema=_build_window_schema(current),
         )
 
     async def async_step_add_window(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
+
         if user_input is not None:
-            win = dict(user_input)
-            lat = win.pop(CONF_LATITUDE, None)
-            lon = win.pop(CONF_LONGITUDE, None)
-            zone_entity = win.get(CONF_ZONE_ENTITY)
-            if zone_entity and (lat is None or lon is None):
-                zone = self.hass.states.get(zone_entity)
-                if zone:
-                    if lat is None:
-                        lat = zone.attributes.get("latitude")
-                    if lon is None:
-                        lon = zone.attributes.get("longitude")
-            if lat is not None:
-                win[CONF_LATITUDE] = lat
-            if lon is not None:
-                win[CONF_LONGITUDE] = lon
-            self.data[CONF_WINDOWS].append(win)
-            return await self.async_step_init()
+            name = user_input.get(CONF_WINDOW_NAME, DEFAULT_NAME)
+            cover_entity_id = user_input.get(CONF_COVER_ENTITY, "")
+
+            if name == DEFAULT_NAME and cover_entity_id:
+                name = _get_cover_friendly_name(self.hass, cover_entity_id)
+                user_input[CONF_WINDOW_NAME] = name
+
+            if _is_window_name_duplicate(self.data[CONF_WINDOWS], name):
+                errors[CONF_WINDOW_NAME] = "duplicate_name"
+            else:
+                win = dict(user_input)
+                lat = win.pop(CONF_LATITUDE, None)
+                lon = win.pop(CONF_LONGITUDE, None)
+                zone_entity = win.get(CONF_ZONE_ENTITY)
+                if zone_entity and (lat is None or lon is None):
+                    zone = self.hass.states.get(zone_entity)
+                    if zone:
+                        if lat is None:
+                            lat = zone.attributes.get("latitude")
+                        if lon is None:
+                            lon = zone.attributes.get("longitude")
+                if lat is not None:
+                    win[CONF_LATITUDE] = lat
+                if lon is not None:
+                    win[CONF_LONGITUDE] = lon
+                self.data[CONF_WINDOWS].append(win)
+                return await self.async_step_init()
 
         return self.async_show_form(
             step_id="add_window",
-            data_schema=WINDOW_SCHEMA,
+            data_schema=_build_window_schema(user_input or {}),
+            errors=errors,
         )
 
     async def async_step_weather(self, user_input: dict[str, Any] | None = None):
