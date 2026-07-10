@@ -7,6 +7,8 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import OptionsFlow
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
     EntitySelector,
     EntitySelectorConfig,
@@ -17,6 +19,7 @@ from .const import (
     CONF_WEATHER_ENTITY,
     CONF_WINDOWS,
     CONF_WINDOW_NAME,
+    CONF_WINDOW_ID,
     CONF_COVER_ENTITY,
     CONF_ORIENTATION,
     CONF_WIDTH,
@@ -135,6 +138,33 @@ def _build_weather_schema() -> vol.Schema:
     })
 
 
+def _cleanup_window_entities(
+    hass: HomeAssistant,
+    entry_id: str,
+    window_name: str,
+    window_id: str,
+) -> None:
+    """Supprime les entités et le device fallback associés à une fenêtre."""
+    ent_reg = er.async_get(hass)
+    dev_reg = dr.async_get(hass)
+
+    for domain, suffix in [
+        ("sensor", "sun"),
+        ("sensor", "position"),
+        ("sensor", "strategy"),
+        ("sensor", "cloud"),
+        ("select", "strategy_select"),
+    ]:
+        unique_id = f"{entry_id}_{window_id}_{window_name}_{suffix}"
+        entity_id = ent_reg.async_get_entity_id(domain, DOMAIN, unique_id)
+        if entity_id:
+            ent_reg.async_remove(entity_id)
+
+    device = dev_reg.async_get_device(identifiers={(DOMAIN, f"{entry_id}_{window_name}")})
+    if device and device.manufacturer == "Sunny":
+        dev_reg.async_remove_device(device.id)
+
+
 class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow pour Sunny — sélection météo puis ajout de fenêtres."""
 
@@ -186,6 +216,7 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     win[CONF_LATITUDE] = lat
                 if lon is not None:
                     win[CONF_LONGITUDE] = lon
+                win[CONF_WINDOW_ID] = win.get(CONF_COVER_ENTITY, "")
                 self.data[CONF_WINDOWS].append(win)
                 return await self.async_step_finish()
 
@@ -257,6 +288,13 @@ class SunnyOptionsFlow(OptionsFlow):
             elif action == "delete" and window_name is not None:
                 idx = int(window_name)
                 if 0 <= idx < len(self.data[CONF_WINDOWS]):
+                    win = self.data[CONF_WINDOWS][idx]
+                    _cleanup_window_entities(
+                        self.hass,
+                        self.entry.entry_id,
+                        win.get(CONF_WINDOW_NAME, ""),
+                        win.get("id", ""),
+                    )
                     self.data[CONF_WINDOWS].pop(idx)
                 return await self.async_step_init()
             elif action == "weather":
@@ -336,6 +374,7 @@ class SunnyOptionsFlow(OptionsFlow):
                     win[CONF_LATITUDE] = lat
                 if lon is not None:
                     win[CONF_LONGITUDE] = lon
+                win[CONF_WINDOW_ID] = win.get(CONF_COVER_ENTITY, "")
                 self.data[CONF_WINDOWS].append(win)
                 return await self.async_step_init()
 

@@ -6,6 +6,7 @@ CONF_WEATHER_ENTITY = "weather_entity"
 CONF_WINDOWS = "windows"
 
 CONF_WINDOW_NAME = "name"
+CONF_WINDOW_ID = "id"
 CONF_COVER_ENTITY = "cover_entity"
 CONF_ORIENTATION = "orientation"
 CONF_WIDTH = "width"

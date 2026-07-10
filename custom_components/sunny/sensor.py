@@ -87,15 +87,15 @@ async def resolve_cover_device(
 def _create_window_entities(
     coordinator: SunnyCoordinator,
     window_name: str,
-    window_idx: int,
+    window_id: str,
     device_info: DeviceInfo,
 ) -> list[SunnyBaseSensor]:
     """Crée les 4 entités capteur pour une fenêtre."""
     return [
-        SunnySunSensor(coordinator, window_name, window_idx, device_info),
-        SunnyPositionSensor(coordinator, window_name, window_idx, device_info),
-        SunnyStrategySensor(coordinator, window_name, window_idx, device_info),
-        SunnyCloudSensor(coordinator, window_name, window_idx, device_info),
+        SunnySunSensor(coordinator, window_name, window_id, device_info),
+        SunnyPositionSensor(coordinator, window_name, window_id, device_info),
+        SunnyStrategySensor(coordinator, window_name, window_id, device_info),
+        SunnyCloudSensor(coordinator, window_name, window_id, device_info),
     ]
 
 
@@ -124,7 +124,8 @@ async def async_setup_entry(
         else:
             device_info = fallback_device_info(entry, name)
 
-        entities.extend(_create_window_entities(coordinator, name, idx, device_info))
+        window_id = win.get("id", win.get("cover_entity", str(idx)))
+        entities.extend(_create_window_entities(coordinator, name, window_id, device_info))
 
     if pending_covers:
         @callback
@@ -154,14 +155,14 @@ class SunnyBaseSensor(CoordinatorEntity, SensorEntity):
         self,
         coordinator: SunnyCoordinator,
         window_name: str,
-        window_idx: int,
+        window_id: str,
         device_info: DeviceInfo,
         sensor_type: str,
     ) -> None:
         super().__init__(coordinator)
         self._window_name = window_name
-        self._window_idx = window_idx
-        self._attr_unique_id = f"{coordinator.entry.entry_id}_{window_idx}_{window_name}_{sensor_type}"
+        self._window_id = window_id
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_{window_id}_{window_name}_{sensor_type}"
         self._attr_device_info = device_info
 
 
@@ -176,10 +177,10 @@ class SunnySunSensor(SunnyBaseSensor):
         self,
         coordinator: SunnyCoordinator,
         window_name: str,
-        window_idx: int,
+        window_id: str,
         device_info: DeviceInfo,
     ) -> None:
-        super().__init__(coordinator, window_name, window_idx, device_info, "sun")
+        super().__init__(coordinator, window_name, window_id, device_info, "sun")
         self._attr_name = f"{window_name} Ensoleillement"
 
     @callback
@@ -218,10 +219,10 @@ class SunnyPositionSensor(SunnyBaseSensor):
         self,
         coordinator: SunnyCoordinator,
         window_name: str,
-        window_idx: int,
+        window_id: str,
         device_info: DeviceInfo,
     ) -> None:
-        super().__init__(coordinator, window_name, window_idx, device_info, "position")
+        super().__init__(coordinator, window_name, window_id, device_info, "position")
         self._attr_name = f"{window_name} Position désirée"
 
     @callback
@@ -248,10 +249,10 @@ class SunnyStrategySensor(SunnyBaseSensor):
         self,
         coordinator: SunnyCoordinator,
         window_name: str,
-        window_idx: int,
+        window_id: str,
         device_info: DeviceInfo,
     ) -> None:
-        super().__init__(coordinator, window_name, window_idx, device_info, "strategy")
+        super().__init__(coordinator, window_name, window_id, device_info, "strategy")
         self._attr_name = f"{window_name} Stratégie"
 
     @callback
@@ -277,10 +278,10 @@ class SunnyCloudSensor(SunnyBaseSensor):
         self,
         coordinator: SunnyCoordinator,
         window_name: str,
-        window_idx: int,
+        window_id: str,
         device_info: DeviceInfo,
     ) -> None:
-        super().__init__(coordinator, window_name, window_idx, device_info, "cloud")
+        super().__init__(coordinator, window_name, window_id, device_info, "cloud")
         self._attr_name = f"{window_name} Couverture nuageuse"
 
     @callback

@@ -27,6 +27,7 @@ async def async_setup_entry(
     for idx, win in enumerate(windows):
         name = win["name"]
         cover_entity_id = win.get("cover_entity", "")
+        window_id = win.get("id", win.get("cover_entity", str(idx)))
 
         if cover_entity_id:
             device_info = await resolve_cover_device(
@@ -39,7 +40,7 @@ async def async_setup_entry(
             device_info = fallback_device_info(entry, name)
 
         entities.append(
-            SunnyStrategySelect(coordinator, name, idx, device_info)
+            SunnyStrategySelect(coordinator, name, idx, window_id, device_info)
         )
 
     if pending_covers:
@@ -72,13 +73,14 @@ class SunnyStrategySelect(CoordinatorEntity, SelectEntity):
         coordinator: SunnyCoordinator,
         window_name: str,
         window_idx: int,
+        window_id: str,
         device_info,
     ) -> None:
         super().__init__(coordinator)
         self._window_name = window_name
         self._window_idx = window_idx
         self._attr_unique_id = (
-            f"{coordinator.entry.entry_id}_{window_idx}_{window_name}_strategy_select"
+            f"{coordinator.entry.entry_id}_{window_id}_{window_name}_strategy_select"
         )
         self._attr_device_info = device_info
         self._attr_name = f"{window_name} Choix stratégie"

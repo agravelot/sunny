@@ -1,15 +1,48 @@
 """Intégration Sunny — capteurs d'ensoleillement pour piloter des stores."""
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 from .coordinator import SunnyCoordinator
 
+_LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "select"]
 
 
+def _migrate_window_ids(entry: ConfigEntry) -> dict | None:
+    """Ajoute un champ 'id' stable aux fenêtres qui n'en ont pas encore.
+
+    Retourne les nouvelles options si une migration a eu lieu, None sinon.
+    """
+    windows = list(entry.options.get("windows", []))
+    migrated = False
+
+    for idx, win in enumerate(windows):
+        if "id" in win:
+            continue
+        win = dict(win)
+        win["id"] = win.get("cover_entity") or win.get("name", f"fenetre_{idx}")
+        windows[idx] = win
+        migrated = True
+
+    if not migrated:
+        return None
+
+    new_options = dict(entry.options)
+    new_options["windows"] = windows
+    return new_options
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    new_options = _migrate_window_ids(entry)
+    if new_options is not None:
+        _LOGGER.info("Migration des IDs de fenêtres effectuée")
+        hass.config_entries.async_update_entry(entry, options=new_options)
+        return True
+
     coordinator = SunnyCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
 
