@@ -1,143 +1,161 @@
 # Sunny
 
-Intégration Home Assistant pour le pilotage solaire des stores et volets.
+Home Assistant integration for solar-driven blind/shutter control.
 
-## Fonctionnalités
+## Features
 
-- Calcule le pourcentage d'ensoleillement direct sur une fenêtre en fonction de la position du soleil
-- Prend en compte l'orientation de la façade, l'épaisseur du mur (embrasure), les obstructions extérieures (mur écran) et l'altitude du logement (horizon dip)
-- Intègre les données météo (couverture nuageuse, température, condition) pour enrichir les capteurs
-- Crée un capteur par fenêtre avec une position de store recommandée (`desired_position`)
-- 7 stratégies de pilotage configurables par fenêtre
-- Paramètres éditables via l'interface de configuration HA (Config Flow / Options Flow)
-- Compatible HACS
+- Computes direct sunlight percentage on a window based on sun position
+- Accounts for facade orientation, wall thickness (reveal), external obstructions (screen wall), and building altitude (horizon dip)
+- Integrates weather data (cloud coverage, temperature, condition) to enrich sensors
+- Creates 4 sensors per window (sun, desired position, active strategy, cloud coverage) + 1 strategy selector
+- 7 configurable control strategies per window
+- Settings editable via HA Config Flow / Options Flow
+- HACS compatible
 
 ## Installation
 
 ### Via HACS (custom repository)
 
-1. Dans HACS, ajouter un dépôt personnalisé : `https://github.com/agravelot/sunny` (type : Integration)
-2. Installer l'intégration Sunny
-3. Redémarrer Home Assistant
+1. In HACS, add a custom repository: `https://github.com/agravelot/sunny` (type: Integration)
+2. Install the Sunny integration
+3. Restart Home Assistant
 
-### Manuellement
+### Manual
 
-Copier le dossier `custom_components/sunny` dans le répertoire `custom_components` de Home Assistant, puis redémarrer.
+Copy the `custom_components/sunny` folder into Home Assistant's `custom_components` directory, then restart.
 
 ## Configuration
 
-1. **Paramètres → Appareils et services → Ajouter une intégration → Sunny**
-2. Sélectionner une entité météo (optionnelle) — enrichit les capteurs avec la température et la couverture nuageuse
-3. Ajouter une ou plusieurs fenêtres :
+1. **Settings → Devices & Services → Add Integration → Sunny**
+2. Select a weather entity (optional) — enriches sensors with temperature and cloud coverage
+3. Add one or more windows:
 
-| Paramètre | Description | Défaut |
-|-----------|-------------|--------|
-| Nom | Nom de la fenêtre (ex: Salon) | — |
-| Store | Entité cover HA associée | — |
-| Orientation | Azimut de la façade (°, 0=Nord, 90=Est, 180=Sud, 270=Ouest) | 180 |
-| Largeur | Largeur de la fenêtre (m) | 1.2 |
-| Hauteur | Hauteur de la fenêtre (m) | 1.4 |
-| Épaisseur du mur | Profondeur de l'embrasure (m) | 0.25 |
-| Distance mur écran | Obstruction extérieure (m, 0 = désactivé) | 0 |
-| Hauteur mur écran | Hauteur de l'obstruction (m) | 1.0 |
-| Altitude | Hauteur de la fenêtre au-dessus du sol (m) | 10 |
-| Stratégie | Algorithme de pilotage | block_all |
-| Entité zone | Zone HA pour la position géographique | optionnel |
-| Latitude / Longitude | Coordonnées manuelles (fallback) | depuis HA |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| Name | Window name (e.g. Living Room) | — |
+| Cover | Associated HA cover entity | — |
+| Orientation | Facade azimuth (°, 0=North, 90=East, 180=South, 270=West) | 180 |
+| Width | Window width (m) | 1.2 |
+| Height | Window height (m) | 1.4 |
+| Wall thickness | Reveal depth (m) | 0.25 |
+| Screen distance | External obstruction distance (m, 0 = disabled) | 0 |
+| Screen height | Obstruction height (m) | 1.0 |
+| Altitude | Window height above ground (m) | 10 |
+| Ground altitude | Ground / sea level altitude (m) | 208 |
+| Tilt threshold | Tilt vs lift threshold (%) | 5 |
+| Slat transmission | Light transmission through closed slats (%) | 5 |
+| Strategy | Control algorithm | block_all |
+| Zone entity | HA zone for geographic position | optional |
 
-4. Les capteurs `sensor.sunny_*` sont créés automatiquement et se mettent à jour toutes les 5 minutes.
+4. Sensors are created automatically and update every 5 minutes (configurable).
 
-Les paramètres sont modifiables à tout moment via le bouton **Configurer** de l'intégration.
+Parameters can be changed at any time via the **Configure** button on the integration.
 
-## Capteur
+## Sensors
 
-Chaque fenêtre produit un capteur `sensor.sunny_{nom}` :
+Each window produces 4 sensors:
 
-| Attribut | Description |
-|----------|-------------|
-| **state** | Pourcentage d'ensoleillement direct (0–100 %) |
-| `solar_altitude` | Hauteur solaire \( h \) (°) |
-| `solar_azimuth` | Azimut solaire \( As \) (°) |
-| `gamma` | Écart azimutal (°) |
-| `hp` | Angle de profil (°) |
-| `theta` | Angle d'incidence (°) |
-| `behind` | Soleil derrière le mur ? |
-| `d_lat` | Ombre des tableaux latéraux (m) |
-| `d_vert` | Ombre du linteau (m) |
-| `lit_area_m2` | Surface éclairée (m²) |
-| `screen_blocks_all` | Mur écran bloque tout ? |
-| `horizon_dip` | Dépression de l'horizon due à l'altitude (°) |
-| `desired_position` | Position de store recommandée (0–100) |
-| `strategy` | Nom de la stratégie active |
-| `cloud_coverage` | Couverture nuageuse (%) — si météo configurée |
-| `weather_condition` | État météo (sunny, cloudy, rainy…) |
-| `temperature` | Température extérieure (°C) |
-| `cover_entity` | Entité cover liée |
-| `zone_entity` | Entité zone utilisée |
-| `latitude`, `longitude` | Coordonnées utilisées |
+| Sensor | Type | Description |
+|--------|------|-------------|
+| `{name} Ensoleillement` | `sensor` | Direct sunlight percentage (0–100%) |
+| `{name} Position désirée` | `sensor` | Recommended blind position (0–100%) |
+| `{name} Stratégie` | `sensor` | Currently active strategy name |
+| `{name} Couverture nuageuse` | `sensor` | Cloud coverage (%) — if weather configured |
+| `{name} Choix stratégie` | `select` | Strategy selector (change strategy from dashboard) |
 
-## Stratégies de pilotage
+### Ensoleillement sensor attributes
 
-La stratégie détermine comment `desired_position` est calculé. Elle est choisie par fenêtre dans la configuration.
-
-| Stratégie | Comportement |
+| Attribute | Description |
 |-----------|-------------|
-| **block_all** | Ferme assez pour bloquer tout le soleil direct (été / canicule). Position = `100 × y_ombre / Hw`. |
-| **winter_passive** | Chauffage solaire passif : ouvert (100%) si soleil sur la fenêtre, fermé (0%) sinon. |
-| **proportional** | `position = 100 − ensoleillement%` : plus il y a de soleil, plus le store descend. |
-| **threshold** | Ferme (0%) si ensoleillement ≥ 50%, ouvre (100%) si ≤ 20%. Interpolation linéaire entre les deux. |
-| **temperature_guard** | Si température ≥ 28°C et ensoleillement ≥ 20% → applique block_all. Sinon ouvert (100%). |
-| **privacy_night** | Fermé (0%) si le soleil est sous l'horizon, ouvert (100%) le jour. |
-| **target_illumination** | Maintient exactement 30% d'ensoleillement. Utilise une recherche 5% + binaire pour trouver la position optimale du store. |
+| `solar_altitude` | Solar elevation \( h \) (°) |
+| `solar_azimuth` | Solar azimuth \( As \) (°) |
+| `gamma` | Azimuth offset (°) |
+| `hp` | Profile angle (°) |
+| `theta` | Incidence angle (°) |
+| `behind` | Sun behind the wall? |
+| `d_lat` | Lateral reveal shadow (m) |
+| `d_vert` | Lintel reveal shadow (m) |
+| `lit_area_m2` | Lit area (m²) |
+| `screen_blocks_all` | Screen wall blocking everything? |
+| `horizon_dip` | Horizon dip from altitude (°) |
 
-De nouvelles stratégies peuvent être ajoutées dans `strategies.py`.
+### Position désirée sensor attributes
 
-## Automatisations
+| Attribute | Description |
+|-----------|-------------|
+| `cover_entity` | Linked cover entity |
+| `tilt_threshold` | Tilt/lift threshold (%) |
+| `slat_transmission` | Light transmission through slats (%) |
 
-Utiliser `desired_position` pour piloter un store :
+### Couverture nuageuse sensor attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `weather_condition` | Weather state (sunny, cloudy, rainy…) |
+| `temperature` | Outside temperature (°C) |
+
+## Control strategies
+
+The strategy determines how `desired_position` is computed. It is chosen per window in the configuration.
+
+| Strategy | Behavior |
+|----------|----------|
+| **block_all** | Closes enough to block all direct sunlight (summer / heatwave). Position = `100 × y_shadow / Hw`. |
+| **winter_passive** | Passive solar heating: open (100%) if sun on window, closed (0%) otherwise. |
+| **proportional** | `position = 100 − sunlight%`: more sun → blind goes lower. |
+| **threshold** | Closed (0%) if sunlight ≥ 50%, open (100%) if ≤ 20%. Linear interpolation between. |
+| **temperature_guard** | If temperature ≥ 28°C and sunlight ≥ 20% → applies block_all. Otherwise open (100%). |
+| **privacy_night** | Closed (0%) when sun below horizon, open (100%) during the day. |
+| **target_illumination** | Maintains exactly 30% sunlight. Uses a 5% search + binary to find optimal blind position. |
+
+New strategies can be added in `strategies.py`.
+
+## Automations
+
+Use `desired_position` to control a blind:
 
 ```yaml
-alias: "Store salon — position solaire"
+alias: "Living room blind — solar position"
 trigger:
   - platform: state
-    entity_id: sensor.sunny_salon
+    entity_id: sensor.salon_position_desiree
 action:
   - service: cover.set_cover_position
     target:
-      entity_id: cover.store_salon
+      entity_id: cover.living_room_blind
     data:
-      position: "{{ state_attr('sensor.sunny_salon', 'desired_position') | int }}"
+      position: "{{ state_attr('sensor.salon_position_desiree', 'desired_position') | int }}"
 ```
 
-Ou avec une condition sur l'ensoleillement :
+Or with a sunlight threshold condition:
 
 ```yaml
-alias: "Fermer si ensoleillement élevé"
+alias: "Close if high sunlight"
 trigger:
   - platform: state
-    entity_id: sensor.sunny_salon
+    entity_id: sensor.salon_ensoleillement
 condition:
   - condition: numeric_state
-    entity_id: sensor.sunny_salon
+    entity_id: sensor.salon_ensoleillement
     above: 40
 action:
   - service: cover.set_cover_position
     target:
-      entity_id: cover.store_salon
+      entity_id: cover.living_room_blind
     data:
-      position: "{{ state_attr('sensor.sunny_salon', 'desired_position') | int }}"
+      position: "{{ state_attr('sensor.salon_position_desiree', 'desired_position') | int }}"
 ```
 
-## Simulateur
+## Simulator
 
-Un simulateur interactif est fourni dans `simulateur_ensoleillement_fenetre.html`. L'ouvrir dans un navigateur pour :
+An interactive simulator is provided in `simulateur_ensoleillement_fenetre.html`. Open it in a browser to:
 
-- Visualiser en plan et en coupe l'ensoleillement d'une fenêtre
-- Tester tous les paramètres (orientation, dimensions, mur écran, altitude)
-- Se connecter à Home Assistant pour récupérer la position actuelle du soleil
-- Placer un marqueur sur une carte OpenStreetMap pour la géolocalisation
+- Visualize sunlight on a window in plan and cross-section views
+- Test all parameters (orientation, dimensions, screen wall, altitude)
+- Connect to Home Assistant to fetch current sun position
+- Place a marker on an OpenStreetMap for geolocation
 
-## Références
+## References
 
-- `FORMULA.md` — détail complet des formules de géométrie solaire
-- `ui.md` — description de l'interface du simulateur et limitations connues
+- `FORMULA.md` — full detail of solar geometry formulas
+- `ui.md` — simulator interface description and known limitations
