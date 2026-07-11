@@ -1,12 +1,12 @@
 {
   "domain": "sunny",
   "name": "Sunny",
-  "version": "0.1.0",
+  "codeowners": ["@agravelot"],
   "config_flow": true,
   "documentation": "https://github.com/agravelot/sunny",
-  "issue_tracker": "https://github.com/agravelot/sunny/issues",
-  "codeowners": ["@agravelot"],
   "integration_type": "hub",
   "iot_class": "calculated",
-  "requirements": []
+  "issue_tracker": "https://github.com/agravelot/sunny/issues",
+  "requirements": [],
+  "version": "0.1.0"
 }
