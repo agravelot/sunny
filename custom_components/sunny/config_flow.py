@@ -281,10 +281,7 @@ class SunnyOptionsFlow(OptionsFlow):
             elif action == "refresh":
                 return await self.async_step_refresh()
             elif action == "done":
-                return self.async_create_entry(
-                    data=self.entry.data,
-                    options=self.data,
-                )
+                return self.async_create_entry(data=self.data)
 
         options = [
             {"label": f"{i+1}. {w.get(CONF_WINDOW_NAME, DEFAULT_NAME)}", "value": str(i)}
