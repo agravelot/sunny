@@ -165,6 +165,10 @@ class SunnyBaseSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{window_id}_{window_name}_{sensor_type}"
         self._attr_device_info = device_info
 
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
+
 
 class SunnySunSensor(SunnyBaseSensor):
     """Capteur d'ensoleillement direct (% de la fenêtre éclairée)."""
