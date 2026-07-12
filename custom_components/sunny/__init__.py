@@ -9,7 +9,7 @@ from .const import DOMAIN
 from .coordinator import SunnyCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["sensor", "select"]
+PLATFORMS = ["sensor", "select", "switch"]
 
 
 def _migrate_window_ids(entry: ConfigEntry) -> dict | None:

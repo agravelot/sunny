@@ -1,0 +1,125 @@
+"""Plateforme switch pour l'intégration Sunny."""
+
+import logging
+
+from homeassistant.components.switch import SwitchEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import DOMAIN
+from .coordinator import SunnyCoordinator
+from .sensor import fallback_device_info, resolve_cover_device
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    coordinator: SunnyCoordinator = hass.data[DOMAIN][entry.entry_id]
+    windows = entry.options.get("windows", [])
+
+    entities = []
+    for idx, win in enumerate(windows):
+        name = win["name"]
+        cover_entity_id = win.get("cover_entity", "")
+        window_id = win.get("id", win.get("cover_entity", str(idx)))
+
+        if cover_entity_id:
+            device_info = await resolve_cover_device(
+                hass, entry, cover_entity_id, name
+            ) or fallback_device_info(entry, name)
+        else:
+            device_info = fallback_device_info(entry, name)
+
+        entities.append(
+            SunnyAutoControlSwitch(
+                coordinator, name, idx, window_id, cover_entity_id, device_info
+            )
+        )
+
+    async_add_entities(entities)
+
+
+class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
+    """Switch pour activer/désactiver le pilotage automatique d'un store."""
+
+    _attr_icon = "mdi:auto-fix"
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: SunnyCoordinator,
+        window_name: str,
+        window_idx: int,
+        window_id: str,
+        cover_entity_id: str,
+        device_info,
+    ) -> None:
+        super().__init__(coordinator)
+        self._window_name = window_name
+        self._window_idx = window_idx
+        self._cover_entity_id = cover_entity_id
+        self._attr_unique_id = (
+            f"{coordinator.entry.entry_id}_{window_id}_{window_name}_auto_control"
+        )
+        self._attr_device_info = device_info
+        self._attr_name = f"{window_name} Pilotage auto"
+        self._attr_is_on = False
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._attr_is_on = last_state.state == "on"
+        self._handle_coordinator_update()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        data = self.coordinator.data.get(self._window_name)
+        if data is None:
+            return
+
+        if self._attr_is_on:
+            desired_position = data.get("desired_position")
+            cover_entity = data.get("cover_entity")
+            if desired_position is not None and cover_entity:
+                self.hass.async_create_task(
+                    self._apply_position(cover_entity, desired_position)
+                )
+
+        self.async_write_ha_state()
+
+    async def _apply_position(self, cover_entity: str, position: int) -> None:
+        try:
+            await self.hass.services.async_call(
+                "cover",
+                "set_cover_position",
+                {"entity_id": cover_entity, "position": position},
+                blocking=True,
+            )
+        except Exception:
+            _LOGGER.exception(
+                "Erreur lors de l'application de la position %s sur %s",
+                position,
+                cover_entity,
+            )
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._attr_is_on = True
+        data = self.coordinator.data.get(self._window_name)
+        if data:
+            desired_position = data.get("desired_position")
+            cover_entity = data.get("cover_entity")
+            if desired_position is not None and cover_entity:
+                await self._apply_position(cover_entity, desired_position)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._attr_is_on = False
+        self.async_write_ha_state()
