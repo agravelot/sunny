@@ -335,6 +335,24 @@ class TestTargetIlluminationStrategy:
         assert 0 <= pos <= 100
 
 
+class TestAlwaysClosedStrategy:
+    def test_full_sun(self):
+        s = strategies.AlwaysClosedStrategy()
+        assert s.compute_position(_full_sun_data()) == 0
+
+    def test_no_sun(self):
+        s = strategies.AlwaysClosedStrategy()
+        assert s.compute_position(_no_sun_data()) == 0
+
+    def test_behind(self):
+        s = strategies.AlwaysClosedStrategy()
+        assert s.compute_position(_full_sun_data(behind=True)) == 0
+
+    def test_empty_data(self):
+        s = strategies.AlwaysClosedStrategy()
+        assert s.compute_position({}) == 0
+
+
 # -----------------------------------------------------------------------
 # Registre
 # -----------------------------------------------------------------------
@@ -348,7 +366,8 @@ class TestRegistry:
         assert "temperature_guard" in strategies.STRATEGIES
         assert "privacy_night" in strategies.STRATEGIES
         assert "target_illumination" in strategies.STRATEGIES
-        assert len(strategies.STRATEGIES) == 7
+        assert "always_closed" in strategies.STRATEGIES
+        assert len(strategies.STRATEGIES) == 8
 
     def test_strategy_options(self):
         assert "block_all" in strategies.STRATEGY_OPTIONS

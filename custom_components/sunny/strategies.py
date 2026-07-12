@@ -224,6 +224,16 @@ class TargetIlluminationStrategy(BaseStrategy):
         return search_cover_position(data, target)
 
 
+class AlwaysClosedStrategy(BaseStrategy):
+    """Toujours fermé — isolation thermique, absence prolongée."""
+
+    name = "always_closed"
+    label = "Toujours fermé"
+
+    def compute_position(self, data: dict) -> int:
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # Registre
 # ---------------------------------------------------------------------------
@@ -236,6 +246,7 @@ STRATEGIES: dict[str, BaseStrategy] = {
     "privacy_night": PrivacyNightStrategy(),
     "target_illumination": TargetIlluminationStrategy(),
     "block_all": BlockAllStrategy(),
+    "always_closed": AlwaysClosedStrategy(),
 }
 
 STRATEGY_OPTIONS = {k: v.label for k, v in STRATEGIES.items()}
