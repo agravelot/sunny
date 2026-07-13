@@ -234,6 +234,16 @@ class AlwaysClosedStrategy(BaseStrategy):
         return 0
 
 
+class AlwaysOpenStrategy(BaseStrategy):
+    """Toujours ouvert — lumière naturelle maximale."""
+
+    name = "always_open"
+    label = "Toujours ouvert"
+
+    def compute_position(self, data: dict) -> int:
+        return 100
+
+
 # ---------------------------------------------------------------------------
 # Registre
 # ---------------------------------------------------------------------------
@@ -247,6 +257,7 @@ STRATEGIES: dict[str, BaseStrategy] = {
     "target_illumination": TargetIlluminationStrategy(),
     "block_all": BlockAllStrategy(),
     "always_closed": AlwaysClosedStrategy(),
+    "always_open": AlwaysOpenStrategy(),
 }
 
 STRATEGY_OPTIONS = {k: v.label for k, v in STRATEGIES.items()}
