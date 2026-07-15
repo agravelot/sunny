@@ -31,6 +31,8 @@ class _MockSwitchEntity:
     _attr_entity_category = None
     def async_write_ha_state(self):
         pass
+    def async_on_remove(self, callback):
+        pass
 
 
 class _MockCoordinatorEntity:
@@ -85,6 +87,7 @@ def _setup_ha_mocks():
 
     ha_event = MagicMock()
     ha_event.async_track_entity_registry_updated_event = MagicMock()
+    ha_event.async_track_state_change_event = MagicMock(return_value=MagicMock())
 
     ha_helpers = MagicMock()
     ha_helpers.device_registry = ha_device_registry
@@ -382,3 +385,154 @@ class TestShouldApply:
         s = self._make_switch(mock_hass)
         s.hass.states.get.return_value = _mock_state("50")
         assert s._should_apply(51, 0, "cover.x") is True
+
+
+class TestOnCoverStateChange:
+    """Tests unitaires pour la détection d'intervention manuelle."""
+
+    def _make_switch(self, mock_hass, desired_position=50):
+        coord = MagicMock()
+        coord.entry = MagicMock()
+        coord.entry.options = {}
+        coord.entry.entry_id = "test_entry"
+        coord.data = {
+            "Test": {
+                "desired_position": desired_position,
+                "cover_entity": "cover.test_shutter",
+            },
+        }
+        s = switch_module.SunnyAutoControlSwitch(
+            coord, "Test", 0, "test_id", "cover.test_shutter", MagicMock(),
+        )
+        s.hass = mock_hass
+        s.async_write_ha_state = MagicMock()
+        return s
+
+    def _event(self, state_value):
+        new_state = _mock_state(state_value)
+        event = MagicMock()
+        event.data = {"new_state": new_state}
+        return event
+
+    def test_manual_change_disables_auto_control(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("30"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_position_matches_desired_is_ignored(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_position_within_threshold_is_ignored(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("52"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_self_applying_blocks_detection(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s._attr_is_on = True
+        s._self_applying = True
+
+        s._on_cover_state_change(self._event("30"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_already_off_does_nothing(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s._attr_is_on = False
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("30"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_not_called()
+
+    def test_no_new_state_does_nothing(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        event = MagicMock()
+        event.data = {}
+        s._on_cover_state_change(event)
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_invalid_state_value_does_nothing(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("unavailable"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_no_coordinator_data_does_nothing(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.coordinator.data = {}
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("30"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_desired_zero_position_change_disables(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_desired_100_position_change_disables(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=100)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("70"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_desired_zero_cover_at_zero_ignored(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("0"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_desired_100_cover_at_100_ignored(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=100)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("100"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()

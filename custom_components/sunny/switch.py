@@ -6,6 +6,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -71,12 +72,18 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._attr_device_info = device_info
         self._attr_name = f"{window_name} Pilotage auto"
         self._attr_is_on = False
+        self._self_applying = False
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
         if last_state is not None:
             self._attr_is_on = last_state.state == "on"
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass, [self._cover_entity_id], self._on_cover_state_change
+            )
+        )
         self._handle_coordinator_update()
 
     @callback
@@ -93,13 +100,50 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                     "position_threshold", DEFAULT_POSITION_THRESHOLD
                 ))
                 if self._should_apply(desired_position, threshold, cover_entity):
+                    self._self_applying = True
                     self.hass.async_create_task(
                         self._apply_position(cover_entity, desired_position)
                     )
 
         self.async_write_ha_state()
 
+    @callback
+    def _on_cover_state_change(self, event) -> None:
+        if self._self_applying:
+            return
+        if not self._attr_is_on:
+            return
+
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+        try:
+            new_position = int(float(new_state.state))
+        except (ValueError, TypeError):
+            return
+
+        data = self.coordinator.data.get(self._window_name)
+        if data is None:
+            return
+        desired = data.get("desired_position")
+        if desired is not None:
+            threshold = int(self.coordinator.entry.options.get(
+                "position_threshold", DEFAULT_POSITION_THRESHOLD
+            ))
+            if abs(new_position - desired) <= threshold:
+                return
+            if desired in (0, 100) and new_position == desired:
+                return
+
+        self._attr_is_on = False
+        self.async_write_ha_state()
+        _LOGGER.info(
+            "Pilotage auto désactivé pour %s (intervention manuelle détectée)",
+            self._window_name,
+        )
+
     async def _apply_position(self, cover_entity: str, position: int) -> None:
+        self._self_applying = True
         try:
             await self.hass.services.async_call(
                 "cover",
@@ -113,6 +157,8 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 position,
                 cover_entity,
             )
+        finally:
+            self._self_applying = False
 
     def _should_apply(self, new: int, threshold: int, cover_entity: str) -> bool:
         state = self.hass.states.get(cover_entity)
