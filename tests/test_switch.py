@@ -136,6 +136,7 @@ SRC = Path(__file__).resolve().parent.parent / "custom_components" / "sunny"
 sys.path.insert(0, str(SRC.parent))
 
 from sunny import switch as switch_module
+from sunny.const import DEFAULT_POSITION_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +184,13 @@ def switch_instance(mock_coordinator, device_info, mock_hass):
     s.hass = mock_hass
     s._attr_is_on = False
     return s
+
+
+def _mock_state(state_value):
+    """Crée un mock State avec .state = state_value."""
+    state = MagicMock()
+    state.state = state_value
+    return state
 
 
 # ---------------------------------------------------------------------------
@@ -303,3 +311,74 @@ class TestSunnyAutoControlSwitch:
         await switch_instance.async_added_to_hass()
 
         assert switch_instance._attr_is_on is False
+
+
+class TestShouldApply:
+    """Tests unitaires pour la méthode _should_apply."""
+
+    def _make_switch(self, mock_hass):
+        coord = MagicMock()
+        coord.entry = MagicMock()
+        coord.entry.options = {}
+        coord.entry.entry_id = "test_entry"
+        coord.data = {"Test": {"desired_position": 50, "cover_entity": "cover.test_shutter"}}
+        s = switch_module.SunnyAutoControlSwitch(
+            coord, "Test", 0, "test_id", "cover.test_shutter", MagicMock(),
+        )
+        s.hass = mock_hass
+        return s
+
+    def test_state_none_applies(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = None
+        assert s._should_apply(50, 3, "cover.x") is True
+
+    def test_state_unavailable_applies(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("unavailable")
+        assert s._should_apply(50, 3, "cover.x") is True
+
+    def test_state_unknown_applies(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("unknown")
+        assert s._should_apply(50, 3, "cover.x") is True
+
+    def test_state_invalid_applies(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("closed")
+        assert s._should_apply(50, 3, "cover.x") is True
+
+    def test_same_position_skips(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("50")
+        assert s._should_apply(50, 3, "cover.x") is False
+
+    def test_target_zero_always_applies(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("50")
+        assert s._should_apply(0, 3, "cover.x") is True
+
+    def test_target_100_always_applies(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("50")
+        assert s._should_apply(100, 3, "cover.x") is True
+
+    def test_current_zero_target_zero_skips(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("0")
+        assert s._should_apply(0, 3, "cover.x") is False
+
+    def test_change_above_threshold_applies(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("50")
+        assert s._should_apply(54, 3, "cover.x") is True
+
+    def test_change_below_threshold_skips(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("50")
+        assert s._should_apply(52, 3, "cover.x") is False
+
+    def test_threshold_zero_always_applies_on_change(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("50")
+        assert s._should_apply(51, 0, "cover.x") is True
