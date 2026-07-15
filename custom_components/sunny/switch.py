@@ -100,7 +100,6 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                     "position_threshold", DEFAULT_POSITION_THRESHOLD
                 ))
                 if self._should_apply(desired_position, threshold, cover_entity):
-                    self._self_applying = True
                     self.hass.async_create_task(
                         self._apply_position(cover_entity, desired_position)
                     )
