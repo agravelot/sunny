@@ -11,11 +11,16 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
     EntitySelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     EntitySelectorConfig,
 )
 
 from .const import (
     DOMAIN,
+    CONF_POSITION_THRESHOLD,
+    DEFAULT_POSITION_THRESHOLD,
     CONF_WEATHER_ENTITY,
     CONF_WINDOWS,
     CONF_WINDOW_NAME,
@@ -281,6 +286,8 @@ class SunnyOptionsFlow(OptionsFlow):
                 return await self.async_step_weather()
             elif action == "refresh":
                 return await self.async_step_refresh()
+            elif action == "position_threshold":
+                return await self.async_step_position_threshold()
             elif action == "done":
                 return self.async_create_entry(data=self.data)
 
@@ -291,7 +298,7 @@ class SunnyOptionsFlow(OptionsFlow):
         options.append({"label": "+ Ajouter une fenêtre", "value": "add"})
 
         schema = vol.Schema({
-            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "refresh", "done"]),
+            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "refresh", "position_threshold", "done"]),
             vol.Optional("window"): vol.In({o["value"]: o["label"] for o in options}),
         })
 
@@ -359,6 +366,24 @@ class SunnyOptionsFlow(OptionsFlow):
                 vol.Optional(CONF_WEATHER_ENTITY, default=current): EntitySelector(
                     EntitySelectorConfig(domain="weather")
                 ),
+            }),
+        )
+
+    async def async_step_position_threshold(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        if user_input is not None:
+            self.data[CONF_POSITION_THRESHOLD] = user_input[CONF_POSITION_THRESHOLD]
+            return await self.async_step_init()
+
+        current = self.data.get(CONF_POSITION_THRESHOLD, DEFAULT_POSITION_THRESHOLD)
+        return self.async_show_form(
+            step_id="position_threshold",
+            data_schema=vol.Schema({
+                vol.Required(CONF_POSITION_THRESHOLD, default=current):
+                    NumberSelector(
+                        NumberSelectorConfig(min=0, max=20, step=1, mode=NumberSelectorMode.BOX)
+                    ),
             }),
         )
 
