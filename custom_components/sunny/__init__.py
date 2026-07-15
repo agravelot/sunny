@@ -12,6 +12,13 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "select", "switch"]
 
 
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    from . import services
+
+    services.async_register_services(hass)
+    return True
+
+
 def _migrate_window_ids(entry: ConfigEntry) -> dict | None:
     """Ajoute un champ 'id' stable aux fenêtres qui n'en ont pas encore.
 

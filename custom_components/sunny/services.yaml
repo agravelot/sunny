@@ -1,0 +1,23 @@
+set_auto_control:
+  name: Définir le pilotage automatique
+  description: Active ou désactive le pilotage automatique des stores Sunny.
+  fields:
+    enabled:
+      name: Activé
+      description: true pour activer le pilotage auto, false pour le désactiver.
+      required: true
+      selector:
+        boolean:
+    entity_id:
+      name: Entités
+      description: Les interrupteurs de pilotage auto à cibler. Si vide, agit sur tous.
+      selector:
+        entity:
+          domain: switch
+          multiple: true
+    area_id:
+      name: Zones
+      description: Cible tous les interrupteurs de pilotage auto Sunny dans ces zones.
+      selector:
+        area:
+          multiple: true
