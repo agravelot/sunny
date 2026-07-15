@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DEFAULT_POSITION_THRESHOLD, DOMAIN
 from .coordinator import SunnyCoordinator
 from .sensor import fallback_device_info, resolve_cover_device
 
@@ -89,9 +89,13 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
             desired_position = data.get("desired_position")
             cover_entity = data.get("cover_entity")
             if desired_position is not None and cover_entity:
-                self.hass.async_create_task(
-                    self._apply_position(cover_entity, desired_position)
-                )
+                threshold = int(self.coordinator.entry.options.get(
+                    "position_threshold", DEFAULT_POSITION_THRESHOLD
+                ))
+                if self._should_apply(desired_position, threshold, cover_entity):
+                    self.hass.async_create_task(
+                        self._apply_position(cover_entity, desired_position)
+                    )
 
         self.async_write_ha_state()
 
@@ -110,6 +114,20 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 cover_entity,
             )
 
+    def _should_apply(self, new: int, threshold: int, cover_entity: str) -> bool:
+        state = self.hass.states.get(cover_entity)
+        if state is None or state.state in ("unavailable", "unknown"):
+            return True
+        try:
+            current = int(float(state.state))
+        except (ValueError, TypeError):
+            return True
+        if new == current:
+            return False
+        if new in (0, 100):
+            return True
+        return abs(new - current) >= threshold
+
     async def async_turn_on(self, **kwargs) -> None:
         self._attr_is_on = True
         data = self.coordinator.data.get(self._window_name)
@@ -117,7 +135,11 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
             desired_position = data.get("desired_position")
             cover_entity = data.get("cover_entity")
             if desired_position is not None and cover_entity:
-                await self._apply_position(cover_entity, desired_position)
+                threshold = int(self.coordinator.entry.options.get(
+                    "position_threshold", DEFAULT_POSITION_THRESHOLD
+                ))
+                if self._should_apply(desired_position, threshold, cover_entity):
+                    await self._apply_position(cover_entity, desired_position)
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:
