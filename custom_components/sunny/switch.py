@@ -116,9 +116,8 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         new_state = event.data.get("new_state")
         if new_state is None:
             return
-        try:
-            new_position = int(float(new_state.state))
-        except (ValueError, TypeError):
+        new_position = self._resolve_position(new_state)
+        if new_position is None:
             return
 
         data = self.coordinator.data.get(self._window_name)
@@ -163,15 +162,27 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         state = self.hass.states.get(cover_entity)
         if state is None or state.state in ("unavailable", "unknown"):
             return True
-        try:
-            current = int(float(state.state))
-        except (ValueError, TypeError):
+        current = self._resolve_position(state)
+        if current is None:
             return True
         if new == current:
             return False
         if new in (0, 100):
             return True
         return abs(new - current) >= threshold
+
+    @staticmethod
+    def _resolve_position(state) -> int | None:
+        pos = state.attributes.get("current_position")
+        if pos is not None:
+            try:
+                return int(float(pos))
+            except (ValueError, TypeError):
+                pass
+        try:
+            return int(float(state.state))
+        except (ValueError, TypeError):
+            return None
 
     async def async_turn_on(self, **kwargs) -> None:
         self._attr_is_on = True

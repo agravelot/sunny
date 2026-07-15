@@ -189,10 +189,14 @@ def switch_instance(mock_coordinator, device_info, mock_hass):
     return s
 
 
-def _mock_state(state_value):
-    """Crée un mock State avec .state = state_value."""
+def _mock_state(state_value, current_position=None):
+    """Crée un mock State avec .state = state_value et attributes."""
     state = MagicMock()
     state.state = state_value
+    attrs = {}
+    if current_position is not None:
+        attrs["current_position"] = current_position
+    state.attributes = attrs
     return state
 
 
@@ -408,8 +412,8 @@ class TestOnCoverStateChange:
         s.async_write_ha_state = MagicMock()
         return s
 
-    def _event(self, state_value):
-        new_state = _mock_state(state_value)
+    def _event(self, state_value, current_position=None):
+        new_state = _mock_state(state_value, current_position)
         event = MagicMock()
         event.data = {"new_state": new_state}
         return event
@@ -536,3 +540,67 @@ class TestOnCoverStateChange:
 
         assert s._attr_is_on is True
         s.async_write_ha_state.assert_not_called()
+
+    def test_cover_with_position_in_attributes_disables(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=70)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("open", current_position=30))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_cover_with_position_in_attributes_matches_desired(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=70)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("open", current_position=70))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_cover_with_closed_state_and_position_in_attributes(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("closed", current_position=0))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+
+class TestResolvePosition:
+    """Tests unitaires pour _resolve_position."""
+
+    def test_from_state_value(self):
+        state = _mock_state("50")
+        result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
+        assert result == 50
+
+    def test_from_attribute(self):
+        state = _mock_state("open", current_position=75)
+        result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
+        assert result == 75
+
+    def test_attribute_takes_priority(self):
+        state = _mock_state("100", current_position=30)
+        result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
+        assert result == 30
+
+    def test_closed_state(self):
+        state = _mock_state("closed", current_position=0)
+        result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
+        assert result == 0
+
+    def test_unavailable_returns_none(self):
+        state = _mock_state("unavailable")
+        result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
+        assert result is None
+
+    def test_no_position_anywhere_returns_none(self):
+        state = _mock_state("open")
+        result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
+        assert result is None
