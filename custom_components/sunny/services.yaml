@@ -13,6 +13,7 @@ set_auto_control:
       description: Les interrupteurs de pilotage auto à cibler. Si vide, agit sur tous.
       selector:
         entity:
+          integration: sunny
           domain: switch
           multiple: true
     area_id:
