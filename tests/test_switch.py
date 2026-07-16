@@ -233,6 +233,14 @@ class TestSunnyAutoControlSwitch:
         )
 
     @pytest.mark.asyncio
+    async def test_turn_on_sets_last_sent_position(self, switch_instance, mock_coordinator, mock_hass):
+        switch_instance._last_sent_position = None
+        mock_hass.services.async_call.reset_mock()
+        await switch_instance.async_turn_on()
+        assert switch_instance._last_sent_position == 50
+        mock_hass.services.async_call.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_turn_on_no_cover_entity(self, switch_instance, mock_coordinator, mock_hass):
         mock_coordinator.data["Test"]["cover_entity"] = None
         mock_hass.services.async_call.reset_mock()
@@ -253,6 +261,14 @@ class TestSunnyAutoControlSwitch:
         switch_instance._handle_coordinator_update()
         mock_hass.async_create_task.assert_called_once()
         switch_instance.async_write_ha_state.assert_called_once()
+
+    def test_coord_update_sets_last_sent_position(self, switch_instance, mock_hass):
+        switch_instance._attr_is_on = True
+        switch_instance._last_sent_position = None
+        switch_instance.async_write_ha_state = MagicMock()
+        switch_instance._handle_coordinator_update()
+        assert switch_instance._last_sent_position == 50
+        mock_hass.async_create_task.assert_called_once()
 
     def test_coord_update_skips_when_off(self, switch_instance, mock_hass):
         switch_instance._attr_is_on = False
@@ -571,6 +587,50 @@ class TestOnCoverStateChange:
         assert s._attr_is_on is True
         s.async_write_ha_state.assert_not_called()
 
+    def test_last_sent_position_match_ignored_even_if_desired_changed(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=30)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_position = 50
+
+        s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_last_sent_position_within_threshold_ignored(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=30)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_position = 50
+
+        s._on_cover_state_change(self._event("52"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_last_sent_position_mismatch_disables(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_position = 50
+
+        s._on_cover_state_change(self._event("20"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_last_sent_position_none_does_not_block(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_position = None
+
+        s._on_cover_state_change(self._event("30"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
 
 class TestResolvePosition:
     """Tests unitaires pour _resolve_position."""
@@ -604,3 +664,72 @@ class TestResolvePosition:
         state = _mock_state("open")
         result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
         assert result is None
+
+
+class TestLastSentPositionConcurrency:
+    """Tests de concurrence entre ticks du coordinator."""
+
+    def _make(self, mock_hass, desired_position=50, last_sent=50):
+        coord = MagicMock()
+        coord.entry = MagicMock()
+        coord.entry.options = {}
+        coord.entry.entry_id = "test_entry"
+        coord.data = {
+            "Test": {
+                "desired_position": desired_position,
+                "cover_entity": "cover.test_shutter",
+            },
+        }
+        s = switch_module.SunnyAutoControlSwitch(
+            coord, "Test", 0, "test_id", "cover.test_shutter", MagicMock(),
+        )
+        s.hass = mock_hass
+        s.async_write_ha_state = MagicMock()
+        s._last_sent_position = last_sent
+        return s
+
+    def _event(self, state_value):
+        new_state = _mock_state(state_value)
+        event = MagicMock()
+        event.data = {"new_state": new_state}
+        return event
+
+    def test_tick2_overwrites_last_sent_close_values_still_ignored(self, mock_hass):
+        """Tick1: last_sent=50, cover va à 50.
+        Tick2: last_sent=53, recalcule desired=53.
+        Event arrive avec position=50 (de tick1).
+        abs(50-53)=3 ≤ threshold(3) → ignoré par seuil."""
+        s = self._make(mock_hass, desired_position=53, last_sent=53)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_tick2_overwrites_last_sent_far_apart_disables(self, mock_hass):
+        """Tick1: last_sent=50, cover va à 50.
+        Tick2: last_sent=80, recalcule desired=80.
+        Event arrive avec position=50 (de tick1).
+        abs(50-80)=30 > threshold(3) → désactive.
+        Ce cas est très improbable en pratique (ticks espacés de 5 min)."""
+        s = self._make(mock_hass, desired_position=80, last_sent=80)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_tick2_same_last_sent_no_conflict(self, mock_hass):
+        """Tick1 et tick2 calculent la même position, pas de conflit."""
+        s = self._make(mock_hass, desired_position=50, last_sent=50)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()

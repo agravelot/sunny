@@ -73,6 +73,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._attr_name = f"{window_name} Pilotage auto"
         self._attr_is_on = False
         self._self_applying = False
+        self._last_sent_position: int | None = None
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -100,6 +101,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                     "position_threshold", DEFAULT_POSITION_THRESHOLD
                 ))
                 if self._should_apply(desired_position, threshold, cover_entity):
+                    self._last_sent_position = desired_position
                     self.hass.async_create_task(
                         self._apply_position(cover_entity, desired_position)
                     )
@@ -120,14 +122,21 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         if new_position is None:
             return
 
+        threshold = int(self.coordinator.entry.options.get(
+            "position_threshold", DEFAULT_POSITION_THRESHOLD
+        ))
+
+        if self._last_sent_position is not None:
+            if new_position == self._last_sent_position:
+                return
+            if abs(new_position - self._last_sent_position) <= threshold:
+                return
+
         data = self.coordinator.data.get(self._window_name)
         if data is None:
             return
         desired = data.get("desired_position")
         if desired is not None:
-            threshold = int(self.coordinator.entry.options.get(
-                "position_threshold", DEFAULT_POSITION_THRESHOLD
-            ))
             if abs(new_position - desired) <= threshold:
                 return
             if desired in (0, 100) and new_position == desired:
@@ -195,6 +204,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                     "position_threshold", DEFAULT_POSITION_THRESHOLD
                 ))
                 if self._should_apply(desired_position, threshold, cover_entity):
+                    self._last_sent_position = desired_position
                     await self._apply_position(cover_entity, desired_position)
         self.async_write_ha_state()
 
