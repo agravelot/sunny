@@ -48,7 +48,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if new_options is not None:
         _LOGGER.info("Migration des IDs de fenêtres effectuée")
         hass.config_entries.async_update_entry(entry, options=new_options)
-        return True
 
     coordinator = SunnyCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
