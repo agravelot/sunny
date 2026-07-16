@@ -631,6 +631,58 @@ class TestOnCoverStateChange:
         assert s._attr_is_on is False
         s.async_write_ha_state.assert_called_once()
 
+    def test_intermediate_position_in_transit_ignored(self, mock_hass):
+        """Cover passe de 100 à 50, position 70 est en transit."""
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_from = 100
+        s._last_sent_position = 50
+
+        s._on_cover_state_change(self._event("70"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_intermediate_position_opening_ignored(self, mock_hass):
+        """Cover passe de 0 à 80, position 30 est en transit."""
+        s = self._make_switch(mock_hass, desired_position=80)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_from = 0
+        s._last_sent_position = 80
+
+        s._on_cover_state_change(self._event("30"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_position_outside_transit_range_disables(self, mock_hass):
+        """Cover passe de 100 à 50, position 40 est en dehors du transit."""
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_from = 100
+        s._last_sent_position = 50
+
+        s._on_cover_state_change(self._event("40"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_position_equal_to_from_is_ignored(self, mock_hass):
+        """Cover part de 100 vers 50, position 100 est le départ (encore en transit)."""
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_from = 100
+        s._last_sent_position = 50
+
+        s._on_cover_state_change(self._event("100"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
 
 class TestResolvePosition:
     """Tests unitaires pour _resolve_position."""
@@ -669,7 +721,7 @@ class TestResolvePosition:
 class TestLastSentPositionConcurrency:
     """Tests de concurrence entre ticks du coordinator."""
 
-    def _make(self, mock_hass, desired_position=50, last_sent=50):
+    def _make(self, mock_hass, desired_position=50, last_sent=50, last_sent_from=None):
         coord = MagicMock()
         coord.entry = MagicMock()
         coord.entry.options = {}
@@ -686,6 +738,7 @@ class TestLastSentPositionConcurrency:
         s.hass = mock_hass
         s.async_write_ha_state = MagicMock()
         s._last_sent_position = last_sent
+        s._last_sent_from = last_sent_from
         return s
 
     def _event(self, state_value):
@@ -730,6 +783,18 @@ class TestLastSentPositionConcurrency:
         s._self_applying = False
 
         s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_tick2_overwrites_transit_still_ignored(self, mock_hass):
+        """Tick1: from=100, target=50. Tick2: overwrites to from=70, target=48.
+        Event 60 arrive (dans les deux transits)."""
+        s = self._make(mock_hass, desired_position=48, last_sent=48, last_sent_from=70)
+        s._attr_is_on = True
+        s._self_applying = False
+
+        s._on_cover_state_change(self._event("60"))
 
         assert s._attr_is_on is True
         s.async_write_ha_state.assert_not_called()

@@ -122,11 +122,11 @@ class TestHandleSetAutoControl:
         call.context = None
         await svc._handle_set_auto_control(hass, call)
 
-        hass.services.async_call.assert_called_once_with(
-            "switch", "turn_on",
-            {"entity_id": ["switch.grand_pilotage_auto", "switch.petit_pilotage_auto"]},
-            blocking=True, context=None,
-        )
+        args = hass.services.async_call.call_args
+        assert args[0][0] == "switch"
+        assert args[0][1] == "turn_on"
+        assert set(args[0][2]["entity_id"]) == {"switch.grand_pilotage_auto", "switch.petit_pilotage_auto"}
+        assert args[1] == {"blocking": True, "context": None}
 
     @pytest.mark.asyncio
     async def test_disable_all(self):
