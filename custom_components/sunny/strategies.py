@@ -43,9 +43,7 @@ def _lit_at_cover_position(data: dict, cover_pos: float) -> float:
 
     nx = len(mask)
     nz = len(mask[0])
-    R = 100
-    nz_check = max(1, int(Hw * R))
-    cell_area = area / (nx * nz_check)
+    cell_area = area / (nx * nz)
 
     # Position du bas du store (depuis le haut)
     if tilt_threshold <= 0 or tilt_threshold >= 100:
@@ -62,7 +60,7 @@ def _lit_at_cover_position(data: dict, cover_pos: float) -> float:
         for iz in range(nz):
             if not mask[ix][iz]:
                 continue
-            z_w = (iz + 0.5) * Hw / nz_check
+            z_w = (iz + 0.5) * Hw / nz
 
             if tilt_threshold <= 0 or tilt_threshold >= 100:
                 if z_w < store_bottom_from_bottom:
