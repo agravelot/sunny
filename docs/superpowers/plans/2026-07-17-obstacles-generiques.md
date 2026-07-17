@@ -549,8 +549,14 @@ Ajouter l'import en haut de `strategies.py` :
 ```python
 import math
 
-from .solar_math import _ray_box_intersect
+try:
+    from .solar_math import _ray_box_intersect
+except ImportError:
+    from solar_math import _ray_box_intersect
 ```
+
+Note : le try/except gère à la fois le contexte package HA (`from .solar_math`)
+et le contexte standalone des tests (`from solar_math` via `sys.path`).
 
 Ajouter après la fonction `_lit_at_cover_position` (avant `search_cover_position`) :
 
