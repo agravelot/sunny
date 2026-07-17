@@ -137,7 +137,7 @@ class TestSearchCoverPosition:
         # lit_bottom = 1.5 - 0 = 1.5
         # lit_h = 0 => 0%
         # So this won't return 0 either.
-        # We need a scenario where d_vert=0, y_ombre=0, etc.
+        # We need a scenario where d_vert=0, sans obstacle, etc.
         data = _full_sun_data(
             lit_pct=10, d_lat=0, d_vert=0,
             tilt_threshold=0,
@@ -271,7 +271,7 @@ class TestTemperatureGuardStrategy:
         s = strategies.TemperatureGuardStrategy()
         data = _full_sun_data(temperature=30, lit_pct=40)
         pos = s.compute_position(data)
-        assert pos == 0  # y_ombre=0 => 100*0/1.5 = 0
+        assert pos == 0  # sans obstacle => block_all = 0
 
     def test_cold_and_sunny(self):
         s = strategies.TemperatureGuardStrategy()
