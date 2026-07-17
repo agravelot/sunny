@@ -21,6 +21,56 @@ def horizon_dip(altitude_m: float) -> float:
     return r2d(math.acos(6371.0 / (6371.0 + altitude_m / 1000.0)))
 
 
+def _ray_box_intersect(
+    px: float, py: float, pz: float,
+    dx: float, dy: float, dz: float,
+    obs: dict,
+) -> bool:
+    """Intersection rayon-boîte alignée (slab method).
+
+    Retourne True si le rayon partant de (px, py, pz) dans la direction
+    (dx, dy, dz) intersecte la boîte définie par l'obstacle.
+    """
+    xmin = min(obs["x1"], obs["x2"])
+    xmax = max(obs["x1"], obs["x2"])
+    ymin = min(obs["y1"], obs["y2"])
+    ymax = max(obs["y1"], obs["y2"])
+    zmin = min(obs["z1"], obs["z2"])
+    zmax = max(obs["z1"], obs["z2"])
+
+    t_near = float("-inf")
+    t_far = float("inf")
+
+    # Slab X
+    if dx != 0.0:
+        t1 = (xmin - px) / dx
+        t2 = (xmax - px) / dx
+        t_near = max(t_near, min(t1, t2))
+        t_far = min(t_far, max(t1, t2))
+    elif px < xmin or px > xmax:
+        return False
+
+    # Slab Y
+    if dy != 0.0:
+        t1 = (ymin - py) / dy
+        t2 = (ymax - py) / dy
+        t_near = max(t_near, min(t1, t2))
+        t_far = min(t_far, max(t1, t2))
+    elif py < ymin or py > ymax:
+        return False
+
+    # Slab Z
+    if dz != 0.0:
+        t1 = (zmin - pz) / dz
+        t2 = (zmax - pz) / dz
+        t_near = max(t_near, min(t1, t2))
+        t_far = min(t_far, max(t1, t2))
+    elif pz < zmin or pz > zmax:
+        return False
+
+    return t_near < t_far and t_near > 0.0
+
+
 def compute_window(
     h: float,
     As: float,
@@ -28,14 +78,16 @@ def compute_window(
     W: float,
     Hw: float,
     e: float = 0.25,
-    D: float = 0.0,
-    Hm: float = 0.0,
+    obstacles: list[dict] | None = None,
     altitude: float = 0.0,
     ground_altitude: float = 0.0,
 ) -> dict:
     dip = horizon_dip(ground_altitude + altitude)
     gamma = norm_angle180(As - An)
     behind = h <= -dip or abs(gamma) >= 90
+
+    if obstacles is None:
+        obstacles = []
 
     result = {
         "solar_altitude": h,
@@ -52,10 +104,9 @@ def compute_window(
         "theta": None,
         "d_lat": 0.0,
         "d_vert": 0.0,
-        "y_ombre": 0.0,
-        "screen_blocks_all": False,
         "lit_area_m2": 0.0,
         "lit_pct": 0.0,
+        "obstacles": obstacles,
     }
 
     if behind:
@@ -69,32 +120,50 @@ def compute_window(
     hp = r2d(math.atan(tan_hp))
 
     d_lat = max(0.0, e * math.tan(abs(g_rad)))
-    w_utile = max(0.0, W - d_lat)
     d_vert = max(0.0, e * math.tan(d2r(max(hp, 0.0))))
-    h_utile = max(0.0, Hw - d_vert)
-
-    y_ombre = 0.0
-    screen_blocks_all = False
-
-    if D > 0:
-        y_ombre = Hm - D * math.tan(d2r(hp))
-        y_ombre = max(0.0, min(Hw, y_ombre))
-        if y_ombre >= Hw:
-            screen_blocks_all = True
-
-    lit_height = max(0.0, h_utile - y_ombre)
-    lit_width = w_utile
-    area = W * Hw
-    lit_area = lit_width * lit_height
-    pct = (lit_area / area * 100.0) if area > 0 else 0.0
 
     result.update({
         "hp": hp,
         "theta": theta,
         "d_lat": d_lat,
         "d_vert": d_vert,
-        "y_ombre": y_ombre,
-        "screen_blocks_all": screen_blocks_all,
+    })
+
+    # Discrétisation proportionnelle à la taille de la fenêtre
+    R = 100  # pts/m
+    nx = max(1, int(W * R))
+    nz = max(1, int(Hw * R))
+
+    # Direction du rayon vers le soleil depuis l'origine (0,0,0)
+    dir_x = math.sin(g_rad) * math.cos(h_rad)
+    dir_y = math.cos(g_rad) * math.cos(h_rad)
+    dir_z = math.sin(h_rad)
+
+    lit_count = 0
+    for ix in range(nx):
+        x_w = (ix + 0.5) * W / nx
+        for iz in range(nz):
+            z_w = (iz + 0.5) * Hw / nz
+            # Ombre d'embrasure
+            if x_w < d_lat or x_w > W - d_lat:
+                continue
+            if z_w > Hw - d_vert:
+                continue
+            # Obstacles
+            blocked = False
+            for obs in obstacles:
+                if _ray_box_intersect(x_w, 0.0, z_w, dir_x, dir_y, dir_z, obs):
+                    blocked = True
+                    break
+            if not blocked:
+                lit_count += 1
+
+    area = W * Hw
+    cell_area = area / (nx * nz)
+    lit_area = lit_count * cell_area
+    pct = (lit_count / (nx * nz) * 100.0) if (nx * nz) > 0 else 0.0
+
+    result.update({
         "lit_area_m2": lit_area,
         "lit_pct": round(pct, 1),
     })

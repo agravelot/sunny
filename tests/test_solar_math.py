@@ -156,52 +156,6 @@ class TestComputeWindow:
         assert result["d_lat"] > 0
         assert 0 < result["lit_pct"] < 100
 
-    def test_screen_blocks_all(self):
-        """Mur écran qui bloque tout."""
-        # h bas → ombre longue : y_ombre = 2 - 5*tan(5°) = 1.56 > Hw=1.5
-        result = solar_math.compute_window(
-            h=5, As=180, An=180, W=2, Hw=1.5, e=0,
-            D=5, Hm=2,
-        )
-        assert result["behind"] is False
-        assert result["screen_blocks_all"] is True
-        assert result["lit_pct"] == 0.0
-
-    def test_screen_partial(self):
-        """Mur écran qui bloque partiellement."""
-        result = solar_math.compute_window(
-            h=30, As=180, An=180, W=2, Hw=1.5, e=0,
-            D=3, Hm=2,
-        )
-        assert result["behind"] is False
-        assert result["screen_blocks_all"] is False
-        # y_ombre = 2 - 3*tan(30°) = 2 - 1.732 = 0.268
-        assert 0 < result["y_ombre"] < 1.5
-
-    def test_screen_partial_visible(self):
-        """Mur écran bas avec soleil haut : ne bloque pas."""
-        result = solar_math.compute_window(
-            h=60, As=180, An=180, W=2, Hw=1.5, e=0,
-            D=3, Hm=1,
-        )
-        # hp = 60°, y_ombre = 1 - 3*tan(60°) = 1 - 3*1.732 = -4.196
-        # y_ombre = max(0, min(1.5, -4.196)) = 0
-        assert result["behind"] is False
-        assert result["screen_blocks_all"] is False
-        assert result["y_ombre"] == 0.0
-        assert approx(result["lit_pct"]) == 100.0
-
-    def test_screen_blocks_upper_part(self):
-        """Mur écran bloque la partie haute de la fenêtre."""
-        result = solar_math.compute_window(
-            h=30, As=180, An=180, W=2, Hw=1.5, e=0,
-            D=2, Hm=1.5,
-        )
-        # hp = 30°, y_ombre = 1.5 - 2*tan(30°) = 1.5 - 2*0.577 = 0.346
-        assert result["behind"] is False
-        assert result["screen_blocks_all"] is False
-        assert approx(result["y_ombre"], 1) == approx(0.346, 1)
-
     def test_zero_area(self):
         """Fenêtre de taille nulle."""
         result = solar_math.compute_window(
@@ -254,3 +208,124 @@ class TestComputeWindow:
         )
         assert result["total_altitude"] == 218
         assert result["ground_altitude"] == 208
+
+
+def _frontal_obstacle(distance, height):
+    """Construit un obstacle frontal équivalent à l'ancien mur-écran."""
+    return {
+        "x1": -10000, "y1": distance, "z1": 0,
+        "x2": 10000,  "y2": distance + 0.001, "z2": height,
+    }
+
+
+class TestObstacles:
+    def test_no_obstacles_full_sun(self):
+        """Aucun obstacle, plein soleil."""
+        result = solar_math.compute_window(
+            h=45, As=180, An=180, W=2, Hw=1.5, e=0,
+            obstacles=[],
+        )
+        assert result["lit_pct"] == 100.0
+
+    def test_frontal_blocks_all(self):
+        """Obstacle frontal qui bloque toute la fenêtre (équivalent screen_blocks_all)."""
+        result = solar_math.compute_window(
+            h=5, As=180, An=180, W=2, Hw=1.5, e=0,
+            obstacles=[_frontal_obstacle(5, 2)],
+        )
+        assert result["behind"] is False
+        assert result["lit_pct"] == 0.0
+
+    def test_frontal_partial(self):
+        """Obstacle frontal partiel (équivalent screen_partial)."""
+        result = solar_math.compute_window(
+            h=30, As=180, An=180, W=2, Hw=1.5, e=0,
+            obstacles=[_frontal_obstacle(3, 2)],
+        )
+        assert result["behind"] is False
+        assert 0 < result["lit_pct"] < 100
+
+    def test_frontal_visible(self):
+        """Obstacle frontal bas, soleil haut : ne bloque pas (équivalent screen_partial_visible)."""
+        result = solar_math.compute_window(
+            h=60, As=180, An=180, W=2, Hw=1.5, e=0,
+            obstacles=[_frontal_obstacle(3, 1)],
+        )
+        assert result["behind"] is False
+        assert result["lit_pct"] == 100.0
+
+    def test_frontal_upper_part(self):
+        """Obstacle frontal bloque la partie haute (équivalent screen_blocks_upper_part)."""
+        result = solar_math.compute_window(
+            h=30, As=180, An=180, W=2, Hw=1.5, e=0,
+            obstacles=[_frontal_obstacle(2, 1.5)],
+        )
+        assert result["behind"] is False
+        assert 0 < result["lit_pct"] < 100
+
+    def test_lateral_wing_left_gamma_negative(self):
+        """Aile à gauche, soleil à gauche (γ < 0) : ombre partielle."""
+        result = solar_math.compute_window(
+            h=45, As=150, An=180,  # gamma = -30
+            W=2, Hw=1.5, e=0,
+            obstacles=[{
+                "x1": -10, "y1": 0, "z1": 0,
+                "x2": 0.5, "y2": 3, "z2": 6,
+            }],
+        )
+        assert result["behind"] is False
+        assert 0 < result["lit_pct"] < 100
+
+    def test_lateral_wing_left_gamma_positive(self):
+        """Aile à gauche, soleil à droite (γ > 0) : pas d'ombre."""
+        result = solar_math.compute_window(
+            h=45, As=210, An=180,  # gamma = +30
+            W=2, Hw=1.5, e=0,
+            obstacles=[{
+                "x1": -10, "y1": 0, "z1": 0,
+                "x2": 0.5, "y2": 3, "z2": 6,
+            }],
+        )
+        assert result["behind"] is False
+        assert result["lit_pct"] == 100.0
+
+    def test_lateral_wing_right_gamma_positive(self):
+        """Aile à droite, soleil à droite (γ > 0) : ombre partielle."""
+        result = solar_math.compute_window(
+            h=45, As=210, An=180,  # gamma = +30
+            W=2, Hw=1.5, e=0,
+            obstacles=[{
+                "x1": 1.5, "y1": 0, "z1": 0,
+                "x2": 10000, "y2": 3, "z2": 6,
+            }],
+        )
+        assert result["behind"] is False
+        assert 0 < result["lit_pct"] < 100
+
+    def test_multiple_obstacles_combined(self):
+        """Mur frontal + aile latérale : ombres cumulées."""
+        result = solar_math.compute_window(
+            h=15, As=150, An=180,  # gamma = -30, soleil bas à gauche
+            W=2, Hw=1.5, e=0,
+            obstacles=[
+                _frontal_obstacle(4, 2),
+                {"x1": -10, "y1": 0, "z1": 0, "x2": 0.3, "y2": 2, "z2": 5},
+            ],
+        )
+        assert result["behind"] is False
+        assert 0 < result["lit_pct"] < 100
+
+    def test_obstacle_discretization_proportional(self):
+        """Vérifie que la grille s'adapte à la taille de la fenêtre."""
+        # Grande fenêtre : 4m × 3m → 400 × 300 points
+        result_big = solar_math.compute_window(
+            h=45, As=180, An=180, W=4, Hw=3, e=0,
+            obstacles=[],
+        )
+        assert approx(result_big["lit_pct"]) == 100.0
+        # Petite fenêtre : doit aussi fonctionner
+        result_small = solar_math.compute_window(
+            h=45, As=180, An=180, W=0.5, Hw=0.4, e=0,
+            obstacles=[],
+        )
+        assert approx(result_small["lit_pct"]) == 100.0
