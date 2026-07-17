@@ -1,6 +1,12 @@
 """Stratégies de pilotage des stores."""
 
+import math
 from abc import ABC, abstractmethod
+
+try:
+    from .solar_math import _ray_box_intersect
+except ImportError:
+    from solar_math import _ray_box_intersect
 
 
 class BaseStrategy(ABC):
@@ -16,66 +22,136 @@ class BaseStrategy(ABC):
 
 def _lit_at_cover_position(data: dict, cover_pos: float) -> float:
     """Calcule le pourcentage d'éclairement si le store est à cover_pos %.
-    
-    Modèle avec phase tilt : les premiers pourcentages d'ouverture basculent
-    les lamelles sans lever le bas du store, laissant passer une fraction de
-    lumière filtrée (sans éblouissement). Au-delà du seuil tilt_threshold,
-    le bas du store se lève physiquement.
+
+    Utilise un masque d'ombre pré-calculé (ombres d'embrasure + obstacles 3D)
+    et applique le modèle store (tilt / levée) par-dessus.
     """
-    if data.get("behind") or data.get("screen_blocks_all"):
-        return 0.0
     Hw = data.get("window_height", 1.0)
     W = data.get("window_width", 1.0)
-    d_vert = data.get("d_vert", 0.0)
-    y_ombre = data.get("y_ombre", 0.0)
-    d_lat = data.get("d_lat", 0.0)
     tilt_threshold = data.get("tilt_threshold", 5.0)
     slat_transmission = data.get("slat_transmission", 5.0)
     area = W * Hw
     if area <= 0:
         return 0.0
 
-    lit_w = max(0.0, W - d_lat)
+    if data.get("behind") or data.get("lit_pct", 0) == 0:
+        return 0.0
 
+    mask = _build_shadow_mask(data)
+    if not mask:
+        return 0.0
+
+    nx = len(mask)
+    nz = len(mask[0])
+    R = 100
+    nz_check = max(1, int(Hw * R))
+    cell_area = area / (nx * nz_check)
+
+    # Position du bas du store (depuis le haut)
     if tilt_threshold <= 0 or tilt_threshold >= 100:
-        # Comportement original sans phase tilt
         y_cover = Hw * (1.0 - cover_pos / 100.0)
-        lit_top = max(d_vert, y_cover)
-        lit_bottom = Hw - y_ombre
-        lit_h = max(0.0, lit_bottom - lit_top)
-        return (lit_w * lit_h / area * 100.0)
-
-    if cover_pos <= tilt_threshold:
-        # Phase tilt : store complètement baissé, lamelles basculent progressivement
-        transmission = (cover_pos / tilt_threshold) * (slat_transmission / 100.0)
-        base_lit_top = d_vert
-        base_lit_bottom = Hw - y_ombre
-        base_lit_h = max(0.0, base_lit_bottom - base_lit_top)
-        return (lit_w * base_lit_h * transmission / area * 100.0)
     else:
-        # Phase levée : lamelles ouvertes, le bas du store se lève
-        effective_pos = (cover_pos - tilt_threshold) / (100.0 - tilt_threshold) * 100.0
-        y_cover = Hw * (1.0 - effective_pos / 100.0)
+        y_cover = Hw * (1.0 - cover_pos / 100.0)
 
-        # Zone dégagée (sous le store) : plein soleil direct
-        clear_top = max(d_vert, y_cover)
-        clear_bottom = Hw - y_ombre
-        clear_h = max(0.0, clear_bottom - clear_top)
-        clear_lit = lit_w * clear_h
+    # Hauteur du store depuis le bas : Hw - y_cover
+    store_bottom_from_bottom = Hw - y_cover
 
-        # Zone couverte par le store (lamelles ouvertes) : lumière filtrée
-        slat_top = d_vert
-        slat_bottom = min(y_cover, Hw - y_ombre)
-        slat_h = max(0.0, slat_bottom - slat_top)
-        slat_lit = lit_w * slat_h * (slat_transmission / 100.0)
+    lit_area = 0.0
+    for ix in range(nx):
+        for iz in range(nz):
+            if not mask[ix][iz]:
+                continue
+            z_w = (iz + 0.5) * Hw / nz_check
 
-        return ((clear_lit + slat_lit) / area * 100.0)
+            if tilt_threshold <= 0 or tilt_threshold >= 100:
+                if z_w < store_bottom_from_bottom:
+                    lit_area += cell_area
+            elif cover_pos <= tilt_threshold:
+                transmission = (cover_pos / tilt_threshold) * (slat_transmission / 100.0)
+                lit_area += cell_area * transmission
+            else:
+                if z_w < store_bottom_from_bottom:
+                    lit_area += cell_area
+                else:
+                    lit_area += cell_area * (slat_transmission / 100.0)
+
+    return (lit_area / area * 100.0) if area > 0 else 0.0
+
+
+def _build_shadow_mask(data: dict) -> list[list[bool]]:
+    """Construit un masque booléen nx × nz : True = non ombré.
+
+    Combine les ombres d'embrasure (d_lat, d_vert) et les obstacles 3D.
+    """
+    W = data.get("window_width", 1.0)
+    Hw = data.get("window_height", 1.0)
+    d_lat = data.get("d_lat", 0.0)
+    d_vert = data.get("d_vert", 0.0)
+    obstacles = data.get("obstacles", [])
+    gamma = data.get("gamma", 0.0)
+    h = data.get("solar_altitude", 0.0)
+
+    R = 100
+    nx = max(1, int(W * R))
+    nz = max(1, int(Hw * R))
+
+    g_rad = math.radians(gamma)
+    h_rad = math.radians(h)
+    dir_x = math.sin(g_rad) * math.cos(h_rad)
+    dir_y = math.cos(g_rad) * math.cos(h_rad)
+    dir_z = math.sin(h_rad)
+
+    mask = [[False] * nz for _ in range(nx)]
+
+    for ix in range(nx):
+        x_w = (ix + 0.5) * W / nx
+        for iz in range(nz):
+            z_w = (iz + 0.5) * Hw / nz
+            if x_w < d_lat or x_w > W - d_lat:
+                continue
+            if z_w > Hw - d_vert:
+                continue
+            blocked = False
+            for obs in obstacles:
+                if _ray_box_intersect(x_w, 0.0, z_w, dir_x, dir_y, dir_z, obs):
+                    blocked = True
+                    break
+            if not blocked:
+                mask[ix][iz] = True
+
+    return mask
+
+
+def _block_all_position(data: dict) -> int:
+    """Trouve la position du store qui bloque tout soleil direct.
+
+    Parcourt la grille de bas en haut et retourne la position où le bas
+    du store couvre tous les points non ombrés.
+    """
+    if data.get("behind") or data.get("lit_pct", 0) == 0:
+        return 100
+
+    Hw = data.get("window_height", 1.0)
+    mask = _build_shadow_mask(data)
+    if not mask:
+        return 100
+
+    nx = len(mask)
+    nz = len(mask[0])
+
+    for iz in range(nz):
+        z = (iz + 0.5) * Hw / nz
+        if any(mask[ix][iz] for ix in range(nx)):
+            pos = 100.0 * z / Hw
+            return max(0, min(100, round(pos)))
+
+    return 100
 
 
 def search_cover_position(data: dict, target_pct: float) -> int:
     """Recherche binaire optimisée (5% + binaire) de la position du store
     qui donne au moins target_pct % d'ensoleillement. Retourne 0-100."""
-    if data.get("behind") or data.get("screen_blocks_all") or data.get("lit_pct", 0) == 0:
+    if data.get("behind") or data.get("lit_pct", 0) == 0:
         return 100
 
     # Étape 1 : balayage par pas de 5 %
@@ -120,17 +196,7 @@ class BlockAllStrategy(BaseStrategy):
     label = "Bloquer tout soleil direct (été/canicule)"
 
     def compute_position(self, data: dict) -> int:
-        if data.get("behind") or data.get("screen_blocks_all"):
-            return 100
-        lit_pct = data.get("lit_pct", 0)
-        if lit_pct == 0:
-            return 100
-        y_ombre = data.get("y_ombre", 0.0)
-        Hw = data.get("window_height", 1.0)
-        if Hw <= 0:
-            return 100
-        pos = 100.0 * y_ombre / Hw
-        return min(100, max(0, round(pos)))
+        return _block_all_position(data)
 
 
 class WinterPassiveStrategy(BaseStrategy):
@@ -191,12 +257,7 @@ class TemperatureGuardStrategy(BaseStrategy):
         temp_threshold = data.get("temp_threshold", 28.0)
         lit_threshold = data.get("lit_threshold", 20.0)
         if temp is not None and temp >= temp_threshold and lit_pct >= lit_threshold:
-            y_ombre = data.get("y_ombre", 0.0)
-            Hw = data.get("window_height", 1.0)
-            if Hw > 0 and y_ombre < Hw:
-                pos = 100.0 * y_ombre / Hw
-                return min(100, max(0, round(pos)))
-            return 0
+            return _block_all_position(data)
         return 100
 
 

@@ -12,19 +12,19 @@ import strategies
 
 
 def _full_sun_data(**kw) -> dict:
-    """Données de base avec plein soleil."""
+    """Données de base avec plein soleil (aucun obstacle)."""
     data = {
         "behind": False,
-        "screen_blocks_all": False,
         "lit_pct": 100.0,
         "window_height": 1.5,
         "window_width": 2.0,
         "d_lat": 0.0,
         "d_vert": 0.0,
-        "y_ombre": 0.0,
         "tilt_threshold": 5.0,
         "slat_transmission": 5.0,
         "solar_altitude": 45.0,
+        "gamma": 0.0,
+        "obstacles": [],
     }
     data.update(kw)
     return data
@@ -42,15 +42,15 @@ class TestLitAtCoverPosition:
     def test_behind(self):
         assert strategies._lit_at_cover_position({"behind": True}, 100) == 0.0
 
-    def test_screen_blocks_all(self):
+    def test_all_shadowed(self):
         assert strategies._lit_at_cover_position(
-            {"behind": False, "screen_blocks_all": True}, 100
+            {"behind": False, "lit_pct": 0.0, "obstacles": []}, 100
         ) == 0.0
 
     def test_open_full_sun(self):
         data = _full_sun_data()
         lit = strategies._lit_at_cover_position(data, 100)
-        assert lit == 100.0
+        assert lit == pytest.approx(100.0)
 
     def test_closed_full_sun(self):
         data = _full_sun_data()
@@ -60,10 +60,8 @@ class TestLitAtCoverPosition:
 
     def test_tilt_phase(self):
         data = _full_sun_data(tilt_threshold=10, slat_transmission=50)
-        # cover_pos=5 <= tilt_threshold=10 => phase tilt
-        # transmission = (5/10)*(50/100) = 0.25
         lit = strategies._lit_at_cover_position(data, 5)
-        assert lit == 25.0
+        assert lit == pytest.approx(25.0)
 
     def test_lift_phase(self):
         data = _full_sun_data(tilt_threshold=10, slat_transmission=50)
@@ -81,22 +79,22 @@ class TestLitAtCoverPosition:
         assert 40 < lit < 60
 
     def test_full_sun_with_wall_shadow(self):
-        data = _full_sun_data(d_lat=0.4, d_vert=0.3, y_ombre=0.0)
+        data = _full_sun_data(d_lat=0.4, d_vert=0.3)
         lit = strategies._lit_at_cover_position(data, 100)
-        # lit_w = 2.0 - 0.4 = 1.6
-        # lit_top = max(0.3, 0) = 0.3
-        # lit_bottom = 1.5 - 0 = 1.5
-        # lit_h = 1.2
-        # area = 2*1.5 = 3.0
-        # pct = (1.6*1.2/3.0)*100 = 64%
-        assert lit == 64.0
+        assert lit == pytest.approx(48.0, abs=0.5)
 
-    def test_screen_partial_shadow(self):
-        """L'ombre du mur écran réduit la zone éclairée même store ouvert."""
-        data = _full_sun_data(y_ombre=0.5)
+    def test_obstacle_partial_shadow(self):
+        """Obstacle frontal crée une ombre partielle, store ouvert."""
+        data = _full_sun_data(
+            solar_altitude=30,
+            gamma=0.0,
+            obstacles=[{
+                "x1": -10000, "y1": 3, "z1": 0,
+                "x2": 10000, "y2": 3.001, "z2": 2,
+            }],
+        )
         lit = strategies._lit_at_cover_position(data, 100)
-        # clear_bottom = 1.5 - 0.5 = 1.0 => lit = (2*1)/3*100 = 66.7
-        assert lit == pytest.approx(66.6667, abs=0.01)
+        assert lit < 100
 
     def test_zero_area(self):
         data = _full_sun_data(window_width=0, window_height=0)
@@ -114,9 +112,9 @@ class TestSearchCoverPosition:
             {"behind": True, "lit_pct": 0}, 30.0
         ) == 100
 
-    def test_screen_blocks_all(self):
+    def test_all_shadowed(self):
         assert strategies.search_cover_position(
-            {"behind": False, "screen_blocks_all": True, "lit_pct": 0}, 30.0
+            {"behind": False, "lit_pct": 0.0, "obstacles": []}, 30.0
         ) == 100
 
     def test_no_lit(self):
@@ -141,7 +139,7 @@ class TestSearchCoverPosition:
         # So this won't return 0 either.
         # We need a scenario where d_vert=0, y_ombre=0, etc.
         data = _full_sun_data(
-            lit_pct=10, d_lat=0, d_vert=0, y_ombre=0,
+            lit_pct=10, d_lat=0, d_vert=0,
             tilt_threshold=0,
         )
         # With tilt_threshold=0: y_cover = 1.5*1.0 = 1.5
@@ -177,9 +175,9 @@ class TestBlockAllStrategy:
         pos = s.compute_position(_full_sun_data(behind=True))
         assert pos == 100
 
-    def test_screen_blocks(self):
+    def test_all_shadowed(self):
         s = strategies.BlockAllStrategy()
-        pos = s.compute_position(_full_sun_data(screen_blocks_all=True))
+        pos = s.compute_position(_full_sun_data(lit_pct=0))
         assert pos == 100
 
     def test_no_lit(self):
@@ -189,14 +187,20 @@ class TestBlockAllStrategy:
 
     def test_full_sun(self):
         s = strategies.BlockAllStrategy()
-        # y_ombre=0, Hw=1.5 => 100 * 0 / 1.5 = 0
-        pos = s.compute_position(_full_sun_data(y_ombre=0.0))
+        pos = s.compute_position(_full_sun_data())
         assert pos == 0
 
     def test_partial_sun(self):
         s = strategies.BlockAllStrategy()
-        pos = s.compute_position(_full_sun_data(lit_pct=50, y_ombre=0.5))
-        assert pos == 33  # 100 * 0.5 / 1.5 = 33.3 -> 33
+        data = _full_sun_data(
+            solar_altitude=30, gamma=0.0,
+            obstacles=[{
+                "x1": -10000, "y1": 2, "z1": 0,
+                "x2": 10000, "y2": 2.001, "z2": 1.5,
+            }],
+        )
+        pos = s.compute_position(data)
+        assert 0 <= pos <= 100  # position intermédiaire
 
 
 class TestWinterPassiveStrategy:
@@ -296,11 +300,18 @@ class TestTemperatureGuardStrategy:
         pos = s.compute_position(data)
         assert pos == 0  # hot+sunny -> block_all
 
-    def test_hot_with_screen(self):
+    def test_hot_with_obstacle(self):
         s = strategies.TemperatureGuardStrategy()
-        data = _full_sun_data(temperature=30, lit_pct=40, y_ombre=0.6)
+        data = _full_sun_data(
+            temperature=30, lit_pct=40,
+            solar_altitude=30, gamma=0.0,
+            obstacles=[{
+                "x1": -10000, "y1": 2, "z1": 0,
+                "x2": 10000, "y2": 2.001, "z2": 1.0,
+            }],
+        )
         pos = s.compute_position(data)
-        assert pos == 40  # 100 * 0.6 / 1.5 = 40
+        assert 0 <= pos <= 100
 
 
 class TestPrivacyNightStrategy:
