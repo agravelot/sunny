@@ -122,6 +122,28 @@
           "oy2": "y2 — distance façade fin (m)",
           "oz2": "z2 — hauteur fin (m)"
         }
+      },
+      "add_obstacle": {
+        "title": "Ajouter un obstacle",
+        "data": {
+          "ox1": "x1 — gauche/droite début (m)",
+          "oy1": "y1 — distance façade début (m)",
+          "oz1": "z1 — hauteur début (m)",
+          "ox2": "x2 — gauche/droite fin (m)",
+          "oy2": "y2 — distance façade fin (m)",
+          "oz2": "z2 — hauteur fin (m)"
+        }
+      },
+      "edit_obstacle": {
+        "title": "Modifier l'obstacle",
+        "data": {
+          "ox1": "x1 — gauche/droite début (m)",
+          "oy1": "y1 — distance façade début (m)",
+          "oz1": "z1 — hauteur début (m)",
+          "ox2": "x2 — gauche/droite fin (m)",
+          "oy2": "y2 — distance façade fin (m)",
+          "oz2": "z2 — hauteur fin (m)"
+        }
       }
     }
   },
