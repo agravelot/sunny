@@ -181,13 +181,17 @@ simple bande horizontale.
    - Sinon : appliquer le modèle store (tilt / levée) comme actuellement
 4. Retourner le pourcentage moyen
 
-Le point 3 bénéficie d'une optimisation : pré-calculer `shadow_mask[nx][nz]`
-(booléen) une seule fois, puis l'appliquer pour chaque appel à
-`_lit_at_cover_position` dans la boucle de `search_cover_position`.
+Le point 3 bénéficie d'une optimisation : une fonction `_build_shadow_mask(data)`
+construit la grille `nx × nz` de booléens (`True` = non ombré) une seule fois.
+Cette fonction est partagée entre `_lit_at_cover_position()`, `search_cover_position()`,
+et `_block_all_position()`.
 
 ### `search_cover_position(data, target_pct)`
 
 Remplacer `data.get("screen_blocks_all")` par `data.get("lit_pct", 0) == 0`.
+Cette fonction est utilisée par `TargetIlluminationStrategy` avec `target_pct > 0`
+→ l'early return est correct : si `lit_pct == 0` (tout ombré), retourne 100
+(store ouvert, rien à bloquer).
 
 Les conditions deviennent :
 ```python
@@ -195,24 +199,62 @@ if data.get("behind") or data.get("lit_pct", 0) == 0:
     return 100
 ```
 
+### `_block_all_position(data)` — nouveau helper
+
+Calcule la position minimale du store qui bloque tout soleil direct,
+quelle que soit la forme de l'ombre (bande horizontale ou motif 3D complexe).
+
+Principe : trouver le point non-ombré le plus bas de la fenêtre, et positionner
+le bas du store juste en dessous. Le store couvre la zone éclairée, l'ombre
+couvre le reste.
+
+```python
+def _block_all_position(data: dict) -> int:
+    """Trouve la position du store qui bloque tout soleil direct."""
+    if data.get("behind") or data.get("lit_pct", 0) == 0:
+        return 100
+    Hw = data["window_height"]
+    # Utilise la même grille que _lit_at_cover_position
+    mask = _build_shadow_mask(data)
+    # Trouve le y minimal (depuis le bas) parmi les points non ombrés
+    nz = len(mask[0])
+    for iz in range(nz):
+        z = (iz + 0.5) * Hw / nz  # y depuis le bas de la fenêtre
+        if any(mask[ix][iz] for ix in range(len(mask))):
+            # Au moins un point non ombré à cette hauteur
+            pos = 100.0 * z / Hw
+            return max(0, min(100, round(pos)))
+    return 100
+```
+
+La boucle itère de bas en haut (`iz = 0` est le bas). Dès qu'elle trouve une
+ligne avec au moins un point non ombré, elle positionne le store pour couvrir
+à partir de cette hauteur. Formule généralisée de l'ancien `pos = 100 × y_ombre / Hw`.
+
 ### `BlockAllStrategy`
 
 **Avant :** `pos = 100 * y_ombre / Hw`
 
-**Après :** `return search_cover_position(data, 0.0)`
+**Après :** `return _block_all_position(data)`
 
 ### `TemperatureGuardStrategy`
 
 **Avant :** calcul manuel `y_ombre / Hw`
 
-**Après :** `return search_cover_position(data, 0.0)` quand chaud + soleil,
+**Après :** `return _block_all_position(data)` quand chaud + soleil,
 `return 100` sinon.
 
 ### Autres stratégies
 
-`WinterPassiveStrategy`, `ProportionalStrategy`, `ThresholdStrategy`,
-`TargetIlluminationStrategy` utilisent déjà `lit_pct` ou `search_cover_position()`
-→ compatibles sans changement.
+| Stratégie | Utilise | Impact |
+|-----------|---------|--------|
+| `WinterPassiveStrategy` | `lit_pct` | Aucun — déjà basé sur lit_pct |
+| `ProportionalStrategy` | `lit_pct` | Aucun |
+| `ThresholdStrategy` | `lit_pct` | Aucun |
+| `TargetIlluminationStrategy` | `search_cover_position(data, target)` | Aucun — target > 0, la recherche fonctionne |
+| `AlwaysClosedStrategy` | rien | Aucun |
+| `AlwaysOpenStrategy` | rien | Aucun |
+| `PrivacyNightStrategy` | `solar_altitude` | Aucun |
 
 ## 4. Config flow (`config_flow.py`)
 
@@ -283,13 +325,9 @@ async_step_edit_obstacle(obstacle_idx) :
 }
 ```
 
-## 5. Simulateur (`simulateur_ensoleillement_fenetre.html`)
+## 5. Simulateur
 
-- Remplacer `D` / `Hm` par une liste d'obstacles éditable
-- Chaque obstacle : 6 inputs numériques `(x1,y1,z1,x2,y2,z2)` + bouton supprimer
-- Bouton « + Ajouter un obstacle »
-- Moteur JS : même algorithme (discrétisation + intersection rayon-boîte)
-- Visualisation plan/coupe : afficher les boîtes 3D projetées
+**Ignoré pour le moment** — sera mis à jour dans une PR séparée.
 
 ## 6. Fichiers impactés
 
@@ -297,13 +335,13 @@ async_step_edit_obstacle(obstacle_idx) :
 |---------|-----------|
 | `const.py` | Remplacer `CONF_SCREEN_*` / `DEFAULT_SCREEN_*` par `CONF_OBSTACLES` + constantes obstacle |
 | `solar_math.py` | `compute_window()` : remplacer `D, Hm` par `obstacles`, ajouter grille + ray-box, retirer `y_ombre`/`screen_blocks_all`, ajouter `obstacles` au résultat |
-| `strategies.py` | `_lit_at_cover_position()` repensé via grille + shadow_mask, remplacer `screen_blocks_all` par `lit_pct == 0`, `BlockAllStrategy`/`TemperatureGuardStrategy` via `search_cover_position` |
+| `strategies.py` | `_lit_at_cover_position()` repensé via grille + shadow_mask, nouveau helper `_block_all_position()`, remplacer `screen_blocks_all` par `lit_pct == 0` |
 | `coordinator.py` | Lire `obstacles` au lieu de `sd, sh`, passer à `compute_window()`, ajouter `obstacles` au dict `data` |
 | `config_flow.py` | Retirer champs écran de `_build_window_schema()`, ajouter sous-menu obstacles (3 steps) |
 | `__init__.py` | Migration auto `screen_distance > 0` → `obstacles` |
 | `sensor.py` | Retirer `screen_blocks_all` des `extra_state_attributes` |
 | `strings.json` | Retirer les traductions `screen_distance`/`screen_height`, ajouter celles des obstacles |
-| `simulateur_ensoleillement_fenetre.html` | Remplacer mur-écran par système d'obstacles |
+| `simulateur_ensoleillement_fenetre.html` | **Ignoré pour le moment** (demande utilisateur) |
 | `tests/test_solar_math.py` | Nouveaux tests obstacles, supprimer tests `screen_*` |
 | `tests/test_strategies.py` | Adapter données de test (obstacles au lieu de y_ombre/screen_blocks_all) |
 
@@ -324,7 +362,8 @@ async_step_edit_obstacle(obstacle_idx) :
 
 - Fixtures : remplacer `y_ombre`/`screen_blocks_all` par des données `obstacles`
   qui produisent le même `lit_pct`
-- Tests `BlockAll` : le résultat doit être identique via `search_cover_position(data, 0.0)`
+- Tests `BlockAll` : vérifier que `_block_all_position(data)` donne le même résultat
+  que l'ancien `100 * y_ombre / Hw` pour un obstacle frontal équivalent
 - Tests `TemperatureGuard` : idem
 
 ### Tests à supprimer
