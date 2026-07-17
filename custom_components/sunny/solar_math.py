@@ -68,7 +68,7 @@ def _ray_box_intersect(
     elif pz < zmin or pz > zmax:
         return False
 
-    return t_near < t_far and t_near > 0.0
+    return t_near < t_far and t_near > 0.0  # t_near > 0 exclut les obstacles attachés à la façade (ailes)
 
 
 def compute_window(
