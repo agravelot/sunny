@@ -30,8 +30,13 @@ from .const import (
     CONF_WIDTH,
     CONF_HEIGHT,
     CONF_WALL_THICKNESS,
-    CONF_SCREEN_DISTANCE,
-    CONF_SCREEN_HEIGHT,
+    CONF_OBSTACLES,
+    CONF_OBSTACLE_X1,
+    CONF_OBSTACLE_Y1,
+    CONF_OBSTACLE_Z1,
+    CONF_OBSTACLE_X2,
+    CONF_OBSTACLE_Y2,
+    CONF_OBSTACLE_Z2,
     CONF_TILT_THRESHOLD,
     CONF_SLAT_TRANSMISSION,
     CONF_ALTITUDE,
@@ -49,8 +54,12 @@ from .const import (
     DEFAULT_WIDTH,
     DEFAULT_HEIGHT,
     DEFAULT_WALL_THICKNESS,
-    DEFAULT_SCREEN_DISTANCE,
-    DEFAULT_SCREEN_HEIGHT,
+    DEFAULT_OBSTACLE_X1,
+    DEFAULT_OBSTACLE_Y1,
+    DEFAULT_OBSTACLE_Z1,
+    DEFAULT_OBSTACLE_X2,
+    DEFAULT_OBSTACLE_Y2,
+    DEFAULT_OBSTACLE_Z2,
     DEFAULT_TILT_THRESHOLD,
     DEFAULT_SLAT_TRANSMISSION,
     DEFAULT_ALTITUDE,
@@ -101,10 +110,6 @@ def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.All(vol.Coerce(float), vol.Range(min=0.4, max=3.0)),
         vol.Required(CONF_WALL_THICKNESS, default=defaults.get(CONF_WALL_THICKNESS, DEFAULT_WALL_THICKNESS)):
             vol.All(vol.Coerce(float), vol.Range(min=0.0, max=0.8)),
-        vol.Optional(CONF_SCREEN_DISTANCE, default=defaults.get(CONF_SCREEN_DISTANCE, DEFAULT_SCREEN_DISTANCE)):
-            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=20.0)),
-        vol.Optional(CONF_SCREEN_HEIGHT, default=defaults.get(CONF_SCREEN_HEIGHT, DEFAULT_SCREEN_HEIGHT)):
-            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=15.0)),
         vol.Required(CONF_TILT_THRESHOLD, default=defaults.get(CONF_TILT_THRESHOLD, DEFAULT_TILT_THRESHOLD)):
             vol.All(vol.Coerce(float), vol.Range(min=0.0, max=100.0)),
         vol.Required(CONF_SLAT_TRANSMISSION, default=defaults.get(CONF_SLAT_TRANSMISSION, DEFAULT_SLAT_TRANSMISSION)):
@@ -134,6 +139,25 @@ def _build_weather_schema() -> vol.Schema:
         vol.Optional(CONF_WEATHER_ENTITY): EntitySelector(
             EntitySelectorConfig(domain="weather")
         ),
+    })
+
+
+def _build_obstacle_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    if defaults is None:
+        defaults = {}
+    return vol.Schema({
+        vol.Required(CONF_OBSTACLE_X1, default=defaults.get(CONF_OBSTACLE_X1, DEFAULT_OBSTACLE_X1)):
+            vol.All(vol.Coerce(float)),
+        vol.Required(CONF_OBSTACLE_Y1, default=defaults.get(CONF_OBSTACLE_Y1, DEFAULT_OBSTACLE_Y1)):
+            vol.All(vol.Coerce(float)),
+        vol.Required(CONF_OBSTACLE_Z1, default=defaults.get(CONF_OBSTACLE_Z1, DEFAULT_OBSTACLE_Z1)):
+            vol.All(vol.Coerce(float)),
+        vol.Required(CONF_OBSTACLE_X2, default=defaults.get(CONF_OBSTACLE_X2, DEFAULT_OBSTACLE_X2)):
+            vol.All(vol.Coerce(float)),
+        vol.Required(CONF_OBSTACLE_Y2, default=defaults.get(CONF_OBSTACLE_Y2, DEFAULT_OBSTACLE_Y2)):
+            vol.All(vol.Coerce(float)),
+        vol.Required(CONF_OBSTACLE_Z2, default=defaults.get(CONF_OBSTACLE_Z2, DEFAULT_OBSTACLE_Z2)):
+            vol.All(vol.Coerce(float)),
     })
 
 
@@ -259,6 +283,7 @@ class SunnyOptionsFlow(OptionsFlow):
         if CONF_WINDOWS not in self.data:
             self.data[CONF_WINDOWS] = []
         self._editing: int | None = None
+        self._obstacle_editing: int = -1
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
@@ -288,6 +313,9 @@ class SunnyOptionsFlow(OptionsFlow):
                 return await self.async_step_refresh()
             elif action == "position_threshold":
                 return await self.async_step_position_threshold()
+            elif action == "obstacles" and window_name is not None:
+                self._editing = int(window_name)
+                return await self.async_step_obstacles()
             elif action == "done":
                 return self.async_create_entry(data=self.data)
 
@@ -298,7 +326,7 @@ class SunnyOptionsFlow(OptionsFlow):
         options.append({"label": "+ Ajouter une fenêtre", "value": "add"})
 
         schema = vol.Schema({
-            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "refresh", "position_threshold", "done"]),
+            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "refresh", "position_threshold", "obstacles", "done"]),
             vol.Optional("window"): vol.In({o["value"]: o["label"] for o in options}),
         })
 
@@ -399,4 +427,114 @@ class SunnyOptionsFlow(OptionsFlow):
                 vol.Required(CONF_REFRESH_INTERVAL, default=current):
                     vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
             }),
+        )
+
+    async def async_step_obstacles(self, user_input: dict[str, Any] | None = None):
+        """Liste des obstacles d'une fenêtre avec actions ajouter/modifier/supprimer."""
+        if user_input is not None:
+            action = user_input.get("action")
+            if action == "add":
+                return await self.async_step_add_obstacle()
+            elif action == "back":
+                return await self.async_step_init()
+            elif action is not None:
+                # "edit_N" ou "delete_N"
+                parts = action.split("_", 1)
+                if len(parts) == 2:
+                    idx = int(parts[1])
+                    windows = self.data.get(CONF_WINDOWS, [])
+                    if self._editing is not None and self._editing < len(windows):
+                        win = windows[self._editing]
+                        obstacles = list(win.get(CONF_OBSTACLES, []))
+                        if parts[0] == "edit" and 0 <= idx < len(obstacles):
+                            self._obstacle_editing = idx
+                            return await self.async_step_edit_obstacle()
+                        elif parts[0] == "delete" and 0 <= idx < len(obstacles):
+                            obstacles.pop(idx)
+                            win = dict(win)
+                            win[CONF_OBSTACLES] = obstacles
+                            windows[self._editing] = win
+                            self.data[CONF_WINDOWS] = windows
+                return await self.async_step_obstacles()
+
+        windows = self.data.get(CONF_WINDOWS, [])
+        obstacles = []
+        if self._editing is not None and self._editing < len(windows):
+            obstacles = windows[self._editing].get(CONF_OBSTACLES, [])
+
+        options = []
+        for i, obs in enumerate(obstacles):
+            label = f"Obstacle {i+1} : ({obs.get(CONF_OBSTACLE_X1,0)},{obs.get(CONF_OBSTACLE_Y1,0)},{obs.get(CONF_OBSTACLE_Z1,0)})→({obs.get(CONF_OBSTACLE_X2,0)},{obs.get(CONF_OBSTACLE_Y2,0)},{obs.get(CONF_OBSTACLE_Z2,0)})"
+            options.extend([
+                {"label": f"✏️ {label}", "value": f"edit_{i}"},
+                {"label": f"🗑️ Supprimer", "value": f"delete_{i}"},
+            ])
+
+        schema = vol.Schema({
+            vol.Required("action"): vol.In(
+                {o["value"]: o["label"] for o in options} | {"add": "+ Ajouter un obstacle", "back": "← Retour"}
+            ),
+        })
+
+        return self.async_show_form(step_id="obstacles", data_schema=schema)
+
+    async def async_step_add_obstacle(self, user_input: dict[str, Any] | None = None):
+        """Formulaire d'ajout d'un obstacle."""
+        if user_input is not None:
+            windows = self.data.get(CONF_WINDOWS, [])
+            if self._editing is not None and self._editing < len(windows):
+                win = dict(windows[self._editing])
+                obstacles = list(win.get(CONF_OBSTACLES, []))
+                obstacles.append({
+                    CONF_OBSTACLE_X1: user_input[CONF_OBSTACLE_X1],
+                    CONF_OBSTACLE_Y1: user_input[CONF_OBSTACLE_Y1],
+                    CONF_OBSTACLE_Z1: user_input[CONF_OBSTACLE_Z1],
+                    CONF_OBSTACLE_X2: user_input[CONF_OBSTACLE_X2],
+                    CONF_OBSTACLE_Y2: user_input[CONF_OBSTACLE_Y2],
+                    CONF_OBSTACLE_Z2: user_input[CONF_OBSTACLE_Z2],
+                })
+                win[CONF_OBSTACLES] = obstacles
+                windows[self._editing] = win
+                self.data[CONF_WINDOWS] = windows
+            return await self.async_step_obstacles()
+
+        return self.async_show_form(
+            step_id="add_obstacle",
+            data_schema=_build_obstacle_schema(),
+        )
+
+    async def async_step_edit_obstacle(self, user_input: dict[str, Any] | None = None):
+        """Formulaire d'édition d'un obstacle existant."""
+        if user_input is not None:
+            windows = self.data.get(CONF_WINDOWS, [])
+            if self._editing is not None and self._editing < len(windows):
+                win = dict(windows[self._editing])
+                obstacles = list(win.get(CONF_OBSTACLES, []))
+                idx = getattr(self, "_obstacle_editing", -1)
+                if 0 <= idx < len(obstacles):
+                    obstacles[idx] = {
+                        CONF_OBSTACLE_X1: user_input[CONF_OBSTACLE_X1],
+                        CONF_OBSTACLE_Y1: user_input[CONF_OBSTACLE_Y1],
+                        CONF_OBSTACLE_Z1: user_input[CONF_OBSTACLE_Z1],
+                        CONF_OBSTACLE_X2: user_input[CONF_OBSTACLE_X2],
+                        CONF_OBSTACLE_Y2: user_input[CONF_OBSTACLE_Y2],
+                        CONF_OBSTACLE_Z2: user_input[CONF_OBSTACLE_Z2],
+                    }
+                    win[CONF_OBSTACLES] = obstacles
+                    windows[self._editing] = win
+                    self.data[CONF_WINDOWS] = windows
+            self._obstacle_editing = -1
+            return await self.async_step_obstacles()
+
+        windows = self.data.get(CONF_WINDOWS, [])
+        current = {}
+        if self._editing is not None and self._editing < len(windows):
+            obstacles = windows[self._editing].get(CONF_OBSTACLES, [])
+            idx = getattr(self, "_obstacle_editing", -1)
+            if 0 <= idx < len(obstacles):
+                current = obstacles[idx]
+
+        return self.async_show_form(
+            step_id="edit_obstacle",
+            data_schema=_build_obstacle_schema(current),
         )
