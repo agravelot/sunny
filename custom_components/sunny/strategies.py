@@ -51,7 +51,8 @@ def _lit_at_cover_position(data: dict, cover_pos: float) -> float:
     if tilt_threshold <= 0 or tilt_threshold >= 100:
         y_cover = Hw * (1.0 - cover_pos / 100.0)
     else:
-        y_cover = Hw * (1.0 - cover_pos / 100.0)
+        effective_pos = (cover_pos - tilt_threshold) / (100.0 - tilt_threshold) * 100.0
+        y_cover = Hw * (1.0 - effective_pos / 100.0)
 
     # Hauteur du store depuis le bas : Hw - y_cover
     store_bottom_from_bottom = Hw - y_cover
