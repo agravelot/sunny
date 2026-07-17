@@ -22,8 +22,6 @@
           "width": "Largeur (m)",
           "height": "Hauteur (m)",
           "wall_thickness": "Épaisseur du mur (m)",
-          "screen_distance": "Distance du mur écran (m, 0 = désactivé)",
-          "screen_height": "Hauteur du mur écran (m)",
           "altitude": "Hauteur au-dessus du sol (m)",
           "ground_altitude": "Altitude du sol / niveau de la mer (m)",
           "strategy": "Stratégie de pilotage",
@@ -66,8 +64,6 @@
           "width": "Largeur (m)",
           "height": "Hauteur (m)",
           "wall_thickness": "Épaisseur du mur (m)",
-          "screen_distance": "Distance du mur écran (m)",
-          "screen_height": "Hauteur du mur écran (m)",
           "altitude": "Hauteur au-dessus du sol (m)",
           "ground_altitude": "Altitude du sol / niveau de la mer (m)",
           "strategy": "Stratégie de pilotage",
@@ -88,8 +84,6 @@
           "width": "Largeur (m)",
           "height": "Hauteur (m)",
           "wall_thickness": "Épaisseur du mur (m)",
-          "screen_distance": "Distance du mur écran (m)",
-          "screen_height": "Hauteur du mur écran (m)",
           "altitude": "Hauteur au-dessus du sol (m)",
           "ground_altitude": "Altitude du sol / niveau de la mer (m)",
           "strategy": "Stratégie de pilotage",
@@ -117,6 +111,17 @@
         "data": {
           "position_threshold": "Seuil minimum de changement (%)"
         }
+      },
+      "obstacles": {
+        "title": "Obstacles de la fenêtre",
+        "data": {
+          "ox1": "x1 — gauche/droite début (m)",
+          "oy1": "y1 — distance façade début (m)",
+          "oz1": "z1 — hauteur début (m)",
+          "ox2": "x2 — gauche/droite fin (m)",
+          "oy2": "y2 — distance façade fin (m)",
+          "oz2": "z2 — hauteur fin (m)"
+        }
       }
     }
   },
@@ -129,6 +134,7 @@
         "weather": "Changer l'entité météo",
         "refresh": "Modifier la fréquence de rafraîchissement",
         "position_threshold": "Changer le seuil de position",
+        "obstacles": "Gérer les obstacles",
         "done": "Terminé"
       }
     }

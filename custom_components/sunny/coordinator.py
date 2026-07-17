@@ -79,8 +79,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
             width = win.get("width", 1.2)
             height = win.get("height", 1.4)
             wall = win.get("wall_thickness", 0.25)
-            sd = win.get("screen_distance", 0.0)
-            sh = win.get("screen_height", 1.0)
+            obstacles = win.get("obstacles", [])
             alt = win.get("altitude", 10)
             ground_alt = win.get("ground_altitude", 208)
 
@@ -88,7 +87,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 data = compute_window(
                     h=h, As=As, An=orientation,
                     W=width, Hw=height, e=wall,
-                    D=sd, Hm=sh, altitude=alt,
+                    obstacles=obstacles, altitude=alt,
                     ground_altitude=ground_alt,
                 )
             except Exception:

@@ -204,7 +204,6 @@ class SunnySunSensor(SunnyBaseSensor):
             "d_lat": data.get("d_lat"),
             "d_vert": data.get("d_vert"),
             "lit_area_m2": data.get("lit_area_m2"),
-            "screen_blocks_all": data.get("screen_blocks_all"),
             "horizon_dip": data.get("horizon_dip"),
             "latitude": data.get("latitude"),
             "longitude": data.get("longitude"),

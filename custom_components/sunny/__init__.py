@@ -43,10 +43,47 @@ def _migrate_window_ids(entry: ConfigEntry) -> dict | None:
     return new_options
 
 
+def _migrate_screen_to_obstacles(entry: ConfigEntry) -> dict | None:
+    """Convertit screen_distance > 0 en obstacle frontal.
+
+    Retourne les nouvelles options si une migration a eu lieu, None sinon.
+    """
+    windows = list(entry.options.get("windows", []))
+    migrated = False
+
+    for idx, win in enumerate(windows):
+        if "obstacles" in win:
+            continue
+        win = dict(win)
+        sd = win.pop("screen_distance", None)
+        sh = win.pop("screen_height", None)
+        obstacles = list(win.get("obstacles", []))
+        if sd is not None and sd > 0:
+            obstacles.append({
+                "x1": -10000, "y1": sd, "z1": 0,
+                "x2": 10000,  "y2": sd + 0.01, "z2": sh or 1.0,
+            })
+            migrated = True
+        win["obstacles"] = obstacles
+        windows[idx] = win
+
+    if not migrated:
+        return None
+
+    new_options = dict(entry.options)
+    new_options["windows"] = windows
+    return new_options
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     new_options = _migrate_window_ids(entry)
     if new_options is not None:
         _LOGGER.info("Migration des IDs de fenêtres effectuée")
+        hass.config_entries.async_update_entry(entry, options=new_options)
+
+    new_options = _migrate_screen_to_obstacles(entry)
+    if new_options is not None:
+        _LOGGER.info("Migration screen_distance → obstacles effectuée")
         hass.config_entries.async_update_entry(entry, options=new_options)
 
     coordinator = SunnyCoordinator(hass, entry)
