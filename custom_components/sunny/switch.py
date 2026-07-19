@@ -133,6 +133,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
 
         if self._last_sent_position is not None:
             if new_position == self._last_sent_position:
+                self._last_sent_from = None
                 return
             if abs(new_position - self._last_sent_position) <= threshold:
                 return
