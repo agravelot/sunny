@@ -304,6 +304,29 @@ class AlwaysOpenStrategy(BaseStrategy):
         return 100
 
 
+class LuxTargetStrategy(BaseStrategy):
+    """Régulation par capteur lux intérieur — seuil + hystérésis + pas fixe."""
+
+    name = "lux_target"
+    label = "Cible lux intérieur (capteur)"
+
+    def compute_position(self, data: dict) -> int:
+        lux = data.get("lux_value")
+        cur = data.get("current_position", 100)
+        high = data.get("lux_high", 5000)
+        low = data.get("lux_low", 3000)
+        step = data.get("lux_step", 10)
+
+        if lux is None:
+            return cur
+
+        if lux > high:
+            return max(0, cur - step)
+        if lux < low:
+            return min(100, cur + step)
+        return cur
+
+
 # ---------------------------------------------------------------------------
 # Registre
 # ---------------------------------------------------------------------------
@@ -318,6 +341,7 @@ STRATEGIES: dict[str, BaseStrategy] = {
     "block_all": BlockAllStrategy(),
     "always_closed": AlwaysClosedStrategy(),
     "always_open": AlwaysOpenStrategy(),
+    "lux_target": LuxTargetStrategy(),
 }
 
 STRATEGY_OPTIONS = {k: v.label for k, v in STRATEGIES.items()}

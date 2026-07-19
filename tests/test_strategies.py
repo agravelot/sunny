@@ -397,7 +397,8 @@ class TestRegistry:
         assert "target_illumination" in strategies.STRATEGIES
         assert "always_closed" in strategies.STRATEGIES
         assert "always_open" in strategies.STRATEGIES
-        assert len(strategies.STRATEGIES) == 9
+        assert "lux_target" in strategies.STRATEGIES
+        assert len(strategies.STRATEGIES) == 10
 
     def test_strategy_options(self):
         assert "block_all" in strategies.STRATEGY_OPTIONS
