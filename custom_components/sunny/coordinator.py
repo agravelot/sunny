@@ -39,13 +39,13 @@ class SunnyCoordinator(DataUpdateCoordinator):
         sun = self.hass.states.get("sun.sun")
         if sun is None:
             _LOGGER.warning("Entité sun.sun introuvable")
-            return {}
+            return self.data if self.data else {}
 
         h = sun.attributes.get("elevation")
         As = sun.attributes.get("azimuth")
         if h is None or As is None:
             _LOGGER.warning("sun.sun sans elevation ou azimuth")
-            return {}
+            return self.data if self.data else {}
 
         weather_data = {"cloud_coverage": None, "weather_condition": None, "temperature": None}
         weather_entity = (
