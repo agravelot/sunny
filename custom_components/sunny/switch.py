@@ -72,10 +72,8 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._attr_device_info = device_info
         self._attr_name = f"{window_name} Pilotage auto"
         self._attr_is_on = False
-        self._self_applying = False
-        self._last_sent_position: int | None = None
-        self._last_sent_from: int | None = None
-        self._expecting_position = False
+        self._command_target: int | None = None
+        self._command_threshold: int = DEFAULT_POSITION_THRESHOLD
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -103,12 +101,8 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                     "position_threshold", DEFAULT_POSITION_THRESHOLD
                 ))
                 if self._should_apply(desired_position, threshold, cover_entity):
-                    old_state = self.hass.states.get(cover_entity)
-                    self._last_sent_from = (
-                        self._resolve_position(old_state) if old_state else None
-                    )
-                    self._last_sent_position = desired_position
-                    self._expecting_position = True
+                    self._command_target = desired_position
+                    self._command_threshold = threshold
                     self.hass.async_create_task(
                         self._apply_position(cover_entity, desired_position)
                     )
@@ -117,8 +111,6 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
 
     @callback
     def _on_cover_state_change(self, event) -> None:
-        if self._self_applying:
-            return
         if not self._attr_is_on:
             return
 
@@ -129,34 +121,20 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         if new_position is None:
             return
 
-        threshold = int(self.coordinator.entry.options.get(
-            "position_threshold", DEFAULT_POSITION_THRESHOLD
-        ))
-
-        if self._expecting_position:
-            if abs(new_position - self._last_sent_position) <= threshold:
-                self._expecting_position = False
-                self._last_sent_from = None
+        # Suppression des événements pendant que le cover rejoint la cible
+        if self._command_target is not None:
+            if abs(new_position - self._command_target) <= self._command_threshold:
+                self._command_target = None
             return
-
-        if self._last_sent_position is not None:
-            if new_position == self._last_sent_position:
-                self._last_sent_from = None
-                return
-            if abs(new_position - self._last_sent_position) <= threshold:
-                return
-
-        if self._last_sent_from is not None and self._last_sent_position is not None:
-            low = min(self._last_sent_from, self._last_sent_position)
-            high = max(self._last_sent_from, self._last_sent_position)
-            if low <= new_position <= high:
-                return
 
         data = self.coordinator.data.get(self._window_name)
         if data is None:
             return
         desired = data.get("desired_position")
         if desired is not None:
+            threshold = int(self.coordinator.entry.options.get(
+                "position_threshold", DEFAULT_POSITION_THRESHOLD
+            ))
             if abs(new_position - desired) <= threshold:
                 return
             if desired in (0, 100) and new_position == desired:
@@ -170,7 +148,6 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         )
 
     async def _apply_position(self, cover_entity: str, position: int) -> None:
-        self._self_applying = True
         try:
             await self.hass.services.async_call(
                 "cover",
@@ -184,8 +161,6 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 position,
                 cover_entity,
             )
-        finally:
-            self._self_applying = False
 
     def _should_apply(self, new: int, threshold: int, cover_entity: str) -> bool:
         state = self.hass.states.get(cover_entity)
@@ -224,15 +199,12 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                     "position_threshold", DEFAULT_POSITION_THRESHOLD
                 ))
                 if self._should_apply(desired_position, threshold, cover_entity):
-                    old_state = self.hass.states.get(cover_entity)
-                    self._last_sent_from = (
-                        self._resolve_position(old_state) if old_state else None
-                    )
-                    self._last_sent_position = desired_position
-                    self._expecting_position = True
+                    self._command_target = desired_position
+                    self._command_threshold = threshold
                     await self._apply_position(cover_entity, desired_position)
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:
         self._attr_is_on = False
+        self._command_target = None
         self.async_write_ha_state()

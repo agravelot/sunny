@@ -201,7 +201,7 @@ def _mock_state(state_value, current_position=None):
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# Tests SunnyAutoControlSwitch
 # ---------------------------------------------------------------------------
 
 class TestSunnyAutoControlSwitch:
@@ -233,11 +233,11 @@ class TestSunnyAutoControlSwitch:
         )
 
     @pytest.mark.asyncio
-    async def test_turn_on_sets_last_sent_position(self, switch_instance, mock_coordinator, mock_hass):
-        switch_instance._last_sent_position = None
+    async def test_turn_on_sets_command_target(self, switch_instance, mock_coordinator, mock_hass):
+        switch_instance._command_target = None
         mock_hass.services.async_call.reset_mock()
         await switch_instance.async_turn_on()
-        assert switch_instance._last_sent_position == 50
+        assert switch_instance._command_target == 50
         mock_hass.services.async_call.assert_called_once()
 
     @pytest.mark.asyncio
@@ -255,6 +255,13 @@ class TestSunnyAutoControlSwitch:
         assert switch_instance._attr_is_on is False
         switch_instance.async_write_ha_state.assert_called()
 
+    @pytest.mark.asyncio
+    async def test_turn_off_clears_command_target(self, switch_instance):
+        switch_instance._attr_is_on = True
+        switch_instance._command_target = 50
+        await switch_instance.async_turn_off()
+        assert switch_instance._command_target is None
+
     def test_coord_update_applies_when_on(self, switch_instance, mock_hass):
         switch_instance._attr_is_on = True
         switch_instance.async_write_ha_state = MagicMock()
@@ -262,12 +269,12 @@ class TestSunnyAutoControlSwitch:
         mock_hass.async_create_task.assert_called_once()
         switch_instance.async_write_ha_state.assert_called_once()
 
-    def test_coord_update_sets_last_sent_position(self, switch_instance, mock_hass):
+    def test_coord_update_sets_command_target(self, switch_instance, mock_hass):
         switch_instance._attr_is_on = True
-        switch_instance._last_sent_position = None
+        switch_instance._command_target = None
         switch_instance.async_write_ha_state = MagicMock()
         switch_instance._handle_coordinator_update()
-        assert switch_instance._last_sent_position == 50
+        assert switch_instance._command_target == 50
         mock_hass.async_create_task.assert_called_once()
 
     def test_coord_update_skips_when_off(self, switch_instance, mock_hass):
@@ -335,6 +342,10 @@ class TestSunnyAutoControlSwitch:
 
         assert switch_instance._attr_is_on is False
 
+
+# ---------------------------------------------------------------------------
+# Tests ShouldApply
+# ---------------------------------------------------------------------------
 
 class TestShouldApply:
     """Tests unitaires pour la méthode _should_apply."""
@@ -407,6 +418,10 @@ class TestShouldApply:
         assert s._should_apply(51, 0, "cover.x") is True
 
 
+# ---------------------------------------------------------------------------
+# Tests OnCoverStateChange
+# ---------------------------------------------------------------------------
+
 class TestOnCoverStateChange:
     """Tests unitaires pour la détection d'intervention manuelle."""
 
@@ -434,10 +449,66 @@ class TestOnCoverStateChange:
         event.data = {"new_state": new_state}
         return event
 
-    def test_manual_change_disables_auto_control(self, mock_hass):
-        s = self._make_switch(mock_hass)
+    # --- command_target suppression ---
+
+    def test_command_target_suppresses(self, mock_hass):
+        """Position intermédiaire ignorée quand Sunny a une cible en cours."""
+        s = self._make_switch(mock_hass, desired_position=0)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("25"))
+
+        assert s._attr_is_on is True
+        assert s._command_target is not None
+        s.async_write_ha_state.assert_not_called()
+
+    def test_command_target_cleared_at_destination(self, mock_hass):
+        """_command_target est clear quand le cover atteint sa destination."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("0"))
+
+        assert s._attr_is_on is True
+        assert s._command_target is None
+        s.async_write_ha_state.assert_not_called()
+
+    def test_command_target_cleared_within_threshold(self, mock_hass):
+        """_command_target est clear quand le cover est proche de la destination."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("2"))
+
+        assert s._attr_is_on is True
+        assert s._command_target is None
+        s.async_write_ha_state.assert_not_called()
+
+    def test_command_target_far_from_target_still_suppressed(self, mock_hass):
+        """Même loin de la cible, on supprime pendant le transit."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("80"))
+
+        assert s._attr_is_on is True
+        assert s._command_target == 0
+        s.async_write_ha_state.assert_not_called()
+
+    # --- manual detection ---
+
+    def test_manual_change_disables(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._command_target = None
 
         s._on_cover_state_change(self._event("30"))
 
@@ -447,7 +518,7 @@ class TestOnCoverStateChange:
     def test_position_matches_desired_is_ignored(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=50)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("50"))
 
@@ -457,27 +528,17 @@ class TestOnCoverStateChange:
     def test_position_within_threshold_is_ignored(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=50)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("52"))
 
         assert s._attr_is_on is True
         s.async_write_ha_state.assert_not_called()
 
-    def test_self_applying_blocks_detection(self, mock_hass):
-        s = self._make_switch(mock_hass)
-        s._attr_is_on = True
-        s._self_applying = True
-
-        s._on_cover_state_change(self._event("30"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
-
     def test_already_off_does_nothing(self, mock_hass):
-        s = self._make_switch(mock_hass)
+        s = self._make_switch(mock_hass, desired_position=50)
         s._attr_is_on = False
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("30"))
 
@@ -485,9 +546,8 @@ class TestOnCoverStateChange:
         s.async_write_ha_state.assert_not_called()
 
     def test_no_new_state_does_nothing(self, mock_hass):
-        s = self._make_switch(mock_hass)
+        s = self._make_switch(mock_hass, desired_position=50)
         s._attr_is_on = True
-        s._self_applying = False
 
         event = MagicMock()
         event.data = {}
@@ -497,9 +557,9 @@ class TestOnCoverStateChange:
         s.async_write_ha_state.assert_not_called()
 
     def test_invalid_state_value_does_nothing(self, mock_hass):
-        s = self._make_switch(mock_hass)
+        s = self._make_switch(mock_hass, desired_position=50)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("unavailable"))
 
@@ -507,10 +567,10 @@ class TestOnCoverStateChange:
         s.async_write_ha_state.assert_not_called()
 
     def test_no_coordinator_data_does_nothing(self, mock_hass):
-        s = self._make_switch(mock_hass)
+        s = self._make_switch(mock_hass, desired_position=50)
         s.coordinator.data = {}
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("30"))
 
@@ -520,7 +580,7 @@ class TestOnCoverStateChange:
     def test_desired_zero_position_change_disables(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=0)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("50"))
 
@@ -530,7 +590,7 @@ class TestOnCoverStateChange:
     def test_desired_100_position_change_disables(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=100)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("70"))
 
@@ -540,7 +600,7 @@ class TestOnCoverStateChange:
     def test_desired_zero_cover_at_zero_ignored(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=0)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("0"))
 
@@ -550,7 +610,7 @@ class TestOnCoverStateChange:
     def test_desired_100_cover_at_100_ignored(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=100)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("100"))
 
@@ -560,7 +620,7 @@ class TestOnCoverStateChange:
     def test_cover_with_position_in_attributes_disables(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=70)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("open", current_position=30))
 
@@ -570,7 +630,7 @@ class TestOnCoverStateChange:
     def test_cover_with_position_in_attributes_matches_desired(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=70)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("open", current_position=70))
 
@@ -580,133 +640,23 @@ class TestOnCoverStateChange:
     def test_cover_with_closed_state_and_position_in_attributes(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=0)
         s._attr_is_on = True
-        s._self_applying = False
+        s._command_target = None
 
         s._on_cover_state_change(self._event("closed", current_position=0))
 
         assert s._attr_is_on is True
         s.async_write_ha_state.assert_not_called()
 
-    def test_last_sent_position_match_ignored_even_if_desired_changed(self, mock_hass):
-        s = self._make_switch(mock_hass, desired_position=30)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_position = 50
+    # --- full flow: command target → clear → manual detection ---
 
-        s._on_cover_state_change(self._event("50"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
-
-    def test_last_sent_position_within_threshold_ignored(self, mock_hass):
-        s = self._make_switch(mock_hass, desired_position=30)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_position = 50
-
-        s._on_cover_state_change(self._event("52"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
-
-    def test_last_sent_position_mismatch_disables(self, mock_hass):
-        s = self._make_switch(mock_hass, desired_position=50)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_position = 50
-
-        s._on_cover_state_change(self._event("20"))
-
-        assert s._attr_is_on is False
-        s.async_write_ha_state.assert_called_once()
-
-    def test_last_sent_position_none_does_not_block(self, mock_hass):
-        s = self._make_switch(mock_hass, desired_position=50)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_position = None
-
-        s._on_cover_state_change(self._event("30"))
-
-        assert s._attr_is_on is False
-        s.async_write_ha_state.assert_called_once()
-
-    def test_intermediate_position_in_transit_ignored(self, mock_hass):
-        """Cover passe de 100 à 50, position 70 est en transit."""
-        s = self._make_switch(mock_hass, desired_position=50)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_from = 100
-        s._last_sent_position = 50
-
-        s._on_cover_state_change(self._event("70"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
-
-    def test_intermediate_position_opening_ignored(self, mock_hass):
-        """Cover passe de 0 à 80, position 30 est en transit."""
-        s = self._make_switch(mock_hass, desired_position=80)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_from = 0
-        s._last_sent_position = 80
-
-        s._on_cover_state_change(self._event("30"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
-
-    def test_position_outside_transit_range_disables(self, mock_hass):
-        """Cover passe de 100 à 50, position 40 est en dehors du transit."""
-        s = self._make_switch(mock_hass, desired_position=50)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_from = 100
-        s._last_sent_position = 50
-
-        s._on_cover_state_change(self._event("40"))
-
-        assert s._attr_is_on is False
-        s.async_write_ha_state.assert_called_once()
-
-    def test_position_equal_to_from_is_ignored(self, mock_hass):
-        """Cover part de 100 vers 50, position 100 est le départ (encore en transit)."""
-        s = self._make_switch(mock_hass, desired_position=50)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_from = 100
-        s._last_sent_position = 50
-
-        s._on_cover_state_change(self._event("100"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
-
-    def test_cover_reaches_destination_resets_last_sent_from(self, mock_hass):
-        """Quand le cover atteint _last_sent_position, _last_sent_from est reset."""
+    def test_after_target_cleared_manual_change_disables(self, mock_hass):
         s = self._make_switch(mock_hass, desired_position=0)
         s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_from = 50
-        s._last_sent_position = 0
+        s._command_target = 0
+        s._command_threshold = 3
 
         s._on_cover_state_change(self._event("0"))
-
-        assert s._attr_is_on is True
-        assert s._last_sent_from is None
-        s.async_write_ha_state.assert_not_called()
-
-    def test_after_transit_reset_manual_change_disables(self, mock_hass):
-        """Après reset de _last_sent_from, une ouverture manuelle désactive. (régression)."""
-        s = self._make_switch(mock_hass, desired_position=0)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_from = 50
-        s._last_sent_position = 0
-
-        s._on_cover_state_change(self._event("0"))
-        assert s._last_sent_from is None
+        assert s._command_target is None
 
         s.async_write_ha_state.reset_mock()
         s._on_cover_state_change(self._event("50"))
@@ -714,71 +664,10 @@ class TestOnCoverStateChange:
         assert s._attr_is_on is False
         s.async_write_ha_state.assert_called_once()
 
-    def test_expecting_position_blocks_intermediate(self, mock_hass):
-        """Position intermédiaire ignorée quand Sunny attend le transit."""
-        s = self._make_switch(mock_hass, desired_position=0)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_position = 0
-        s._last_sent_from = None
-        s._expecting_position = True
 
-        s._on_cover_state_change(self._event("25"))
-
-        assert s._attr_is_on is True
-        assert s._expecting_position is True
-        s.async_write_ha_state.assert_not_called()
-
-    def test_expecting_position_cleared_at_destination(self, mock_hass):
-        """_expecting_position est clear quand le cover atteint sa destination."""
-        s = self._make_switch(mock_hass, desired_position=0)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_position = 0
-        s._last_sent_from = None
-        s._expecting_position = True
-
-        s._on_cover_state_change(self._event("0"))
-
-        assert s._attr_is_on is True
-        assert s._expecting_position is False
-        assert s._last_sent_from is None
-        s.async_write_ha_state.assert_not_called()
-
-    def test_expecting_position_cleared_within_threshold(self, mock_hass):
-        """_expecting_position est clear quand le cover est proche de la destination."""
-        s = self._make_switch(mock_hass, desired_position=0)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_position = 0
-        s._last_sent_from = None
-        s._expecting_position = True
-
-        s._on_cover_state_change(self._event("2"))
-
-        assert s._attr_is_on is True
-        assert s._expecting_position is False
-        assert s._last_sent_from is None
-        s.async_write_ha_state.assert_not_called()
-
-    def test_after_expecting_cleared_manual_change_disables(self, mock_hass):
-        """Après _expecting_position clear, une intervention manuelle désactive."""
-        s = self._make_switch(mock_hass, desired_position=0)
-        s._attr_is_on = True
-        s._self_applying = False
-        s._last_sent_position = 0
-        s._last_sent_from = None
-        s._expecting_position = True
-
-        s._on_cover_state_change(self._event("0"))
-        assert s._expecting_position is False
-
-        s.async_write_ha_state.reset_mock()
-        s._on_cover_state_change(self._event("50"))
-
-        assert s._attr_is_on is False
-        s.async_write_ha_state.assert_called_once()
-
+# ---------------------------------------------------------------------------
+# Tests ResolvePosition
+# ---------------------------------------------------------------------------
 
 class TestResolvePosition:
     """Tests unitaires pour _resolve_position."""
@@ -812,85 +701,3 @@ class TestResolvePosition:
         state = _mock_state("open")
         result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
         assert result is None
-
-
-class TestLastSentPositionConcurrency:
-    """Tests de concurrence entre ticks du coordinator."""
-
-    def _make(self, mock_hass, desired_position=50, last_sent=50, last_sent_from=None):
-        coord = MagicMock()
-        coord.entry = MagicMock()
-        coord.entry.options = {}
-        coord.entry.entry_id = "test_entry"
-        coord.data = {
-            "Test": {
-                "desired_position": desired_position,
-                "cover_entity": "cover.test_shutter",
-            },
-        }
-        s = switch_module.SunnyAutoControlSwitch(
-            coord, "Test", 0, "test_id", "cover.test_shutter", MagicMock(),
-        )
-        s.hass = mock_hass
-        s.async_write_ha_state = MagicMock()
-        s._last_sent_position = last_sent
-        s._last_sent_from = last_sent_from
-        return s
-
-    def _event(self, state_value):
-        new_state = _mock_state(state_value)
-        event = MagicMock()
-        event.data = {"new_state": new_state}
-        return event
-
-    def test_tick2_overwrites_last_sent_close_values_still_ignored(self, mock_hass):
-        """Tick1: last_sent=50, cover va à 50.
-        Tick2: last_sent=53, recalcule desired=53.
-        Event arrive avec position=50 (de tick1).
-        abs(50-53)=3 ≤ threshold(3) → ignoré par seuil."""
-        s = self._make(mock_hass, desired_position=53, last_sent=53)
-        s._attr_is_on = True
-        s._self_applying = False
-
-        s._on_cover_state_change(self._event("50"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
-
-    def test_tick2_overwrites_last_sent_far_apart_disables(self, mock_hass):
-        """Tick1: last_sent=50, cover va à 50.
-        Tick2: last_sent=80, recalcule desired=80.
-        Event arrive avec position=50 (de tick1).
-        abs(50-80)=30 > threshold(3) → désactive.
-        Ce cas est très improbable en pratique (ticks espacés de 5 min)."""
-        s = self._make(mock_hass, desired_position=80, last_sent=80)
-        s._attr_is_on = True
-        s._self_applying = False
-
-        s._on_cover_state_change(self._event("50"))
-
-        assert s._attr_is_on is False
-        s.async_write_ha_state.assert_called_once()
-
-    def test_tick2_same_last_sent_no_conflict(self, mock_hass):
-        """Tick1 et tick2 calculent la même position, pas de conflit."""
-        s = self._make(mock_hass, desired_position=50, last_sent=50)
-        s._attr_is_on = True
-        s._self_applying = False
-
-        s._on_cover_state_change(self._event("50"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
-
-    def test_tick2_overwrites_transit_still_ignored(self, mock_hass):
-        """Tick1: from=100, target=50. Tick2: overwrites to from=70, target=48.
-        Event 60 arrive (dans les deux transits)."""
-        s = self._make(mock_hass, desired_position=48, last_sent=48, last_sent_from=70)
-        s._attr_is_on = True
-        s._self_applying = False
-
-        s._on_cover_state_change(self._event("60"))
-
-        assert s._attr_is_on is True
-        s.async_write_ha_state.assert_not_called()
