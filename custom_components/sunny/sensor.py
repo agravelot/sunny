@@ -89,7 +89,7 @@ def _create_window_entities(
     window_name: str,
     window_id: str,
     device_info: DeviceInfo,
-) -> list[SunnyBaseSensor]:
+) -> list["SunnyBaseSensor"]:
     """Crée les 4 entités capteur pour une fenêtre."""
     return [
         SunnySunSensor(coordinator, window_name, window_id, device_info),
