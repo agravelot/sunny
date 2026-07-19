@@ -10,11 +10,13 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
+    AreaSelector,
+    AreaSelectorConfig,
     EntitySelector,
+    EntitySelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
-    EntitySelectorConfig,
 )
 
 from .const import (
@@ -48,6 +50,11 @@ from .const import (
     CONF_STRATEGY_LOW,
     CONF_TEMP_THRESHOLD,
     CONF_LIT_THRESHOLD,
+    CONF_LUX_AREA_ID,
+    CONF_LUX_HIGH,
+    CONF_LUX_LOW,
+    CONF_LUX_SENSORS,
+    CONF_LUX_STEP,
     CONF_TARGET_ILLUMINATION,
     DEFAULT_NAME,
     DEFAULT_ORIENTATION,
@@ -70,6 +77,9 @@ from .const import (
     DEFAULT_STRATEGY_LOW,
     DEFAULT_TEMP_THRESHOLD,
     DEFAULT_LIT_THRESHOLD,
+    DEFAULT_LUX_HIGH,
+    DEFAULT_LUX_LOW,
+    DEFAULT_LUX_STEP,
     DEFAULT_TARGET_ILLUMINATION,
 )
 from .strategies import STRATEGY_OPTIONS
@@ -131,6 +141,16 @@ def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
         vol.Optional(CONF_ZONE_ENTITY, default=defaults.get(CONF_ZONE_ENTITY)):
             EntitySelector(EntitySelectorConfig(domain="zone")),
+        vol.Optional(CONF_LUX_SENSORS, default=defaults.get(CONF_LUX_SENSORS, [])):
+            EntitySelector(EntitySelectorConfig(domain="sensor", multiple=True)),
+        vol.Optional(CONF_LUX_AREA_ID, default=defaults.get(CONF_LUX_AREA_ID)):
+            AreaSelector(AreaSelectorConfig()),
+        vol.Optional(CONF_LUX_HIGH, default=defaults.get(CONF_LUX_HIGH, DEFAULT_LUX_HIGH)):
+            vol.All(vol.Coerce(float), vol.Range(min=100, max=100000)),
+        vol.Optional(CONF_LUX_LOW, default=defaults.get(CONF_LUX_LOW, DEFAULT_LUX_LOW)):
+            vol.All(vol.Coerce(float), vol.Range(min=100, max=100000)),
+        vol.Optional(CONF_LUX_STEP, default=defaults.get(CONF_LUX_STEP, DEFAULT_LUX_STEP)):
+            vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
     })
 
 
