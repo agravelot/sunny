@@ -50,6 +50,8 @@ class SunnyCoordinator(DataUpdateCoordinator):
         Priorité : lux_sensors (explicite) > lux_area_id (découverte zone HA).
         """
         explicit = win.get("lux_sensors", [])
+        if isinstance(explicit, str):
+            explicit = [explicit]
         if explicit:
             return [e for e in explicit if isinstance(e, str) and e]
 

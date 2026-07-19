@@ -105,10 +105,19 @@ def _is_window_name_duplicate(
     return False
 
 
+def _validate_lux_thresholds(values: dict) -> dict:
+    """Valide que lux_high > lux_low si les deux sont définis."""
+    high = values.get(CONF_LUX_HIGH)
+    low = values.get(CONF_LUX_LOW)
+    if high is not None and low is not None and high <= low:
+        raise vol.Invalid("lux_high doit être supérieur à lux_low")
+    return values
+
+
 def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     if defaults is None:
         defaults = {}
-    return vol.Schema({
+    return vol.All(vol.Schema({
         vol.Required(CONF_WINDOW_NAME, default=defaults.get(CONF_WINDOW_NAME, DEFAULT_NAME)): str,
         vol.Required(CONF_COVER_ENTITY, default=defaults.get(CONF_COVER_ENTITY)):
             EntitySelector(EntitySelectorConfig(domain="cover")),
@@ -142,7 +151,7 @@ def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
         vol.Optional(CONF_ZONE_ENTITY, default=defaults.get(CONF_ZONE_ENTITY)):
             EntitySelector(EntitySelectorConfig(domain="zone")),
         vol.Optional(CONF_LUX_SENSORS, default=defaults.get(CONF_LUX_SENSORS, [])):
-            EntitySelector(EntitySelectorConfig(domain="sensor", multiple=True)),
+            EntitySelector(EntitySelectorConfig(domain="sensor", device_class="illuminance", multiple=True)),
         vol.Optional(CONF_LUX_AREA_ID, default=defaults.get(CONF_LUX_AREA_ID)):
             AreaSelector(AreaSelectorConfig()),
         vol.Optional(CONF_LUX_HIGH, default=defaults.get(CONF_LUX_HIGH, DEFAULT_LUX_HIGH)):
@@ -151,7 +160,7 @@ def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.All(vol.Coerce(float), vol.Range(min=100, max=100000)),
         vol.Optional(CONF_LUX_STEP, default=defaults.get(CONF_LUX_STEP, DEFAULT_LUX_STEP)):
             vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
-    })
+    }), _validate_lux_thresholds)
 
 
 def _build_weather_schema() -> vol.Schema:
@@ -512,7 +521,7 @@ class SunnyOptionsFlow(OptionsFlow):
                     CONF_OBSTACLE_X2: user_input[CONF_OBSTACLE_X2],
                     CONF_OBSTACLE_Y2: user_input[CONF_OBSTACLE_Y2],
                     CONF_OBSTACLE_Z2: user_input[CONF_OBSTACLE_Z2],
-                })
+}), _validate_lux_thresholds)
                 win[CONF_OBSTACLES] = obstacles
                 windows[self._editing] = win
                 self.data[CONF_WINDOWS] = windows
