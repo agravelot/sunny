@@ -30,6 +30,11 @@
           "temp_threshold": "Seuil température (°C)",
           "lit_threshold": "Seuil ensoleillement (%)",
           "target_illumination": "Cible d'ensoleillement (%)",
+          "lux_sensors": "Capteurs lux",
+          "lux_area_id": "Zone HA (alternative aux capteurs)",
+          "lux_high": "Seuil haut lux (lx)",
+          "lux_low": "Seuil bas lux (lx)",
+          "lux_step": "Pas d'ajustement (%)",
           "zone_entity": "Entité zone (position géographique)"
         }
       },
@@ -72,6 +77,11 @@
           "temp_threshold": "Seuil température (°C)",
           "lit_threshold": "Seuil ensoleillement (%)",
           "target_illumination": "Cible d'ensoleillement (%)",
+          "lux_sensors": "Capteurs lux",
+          "lux_area_id": "Zone HA (alternative aux capteurs)",
+          "lux_high": "Seuil haut lux (lx)",
+          "lux_low": "Seuil bas lux (lx)",
+          "lux_step": "Pas d'ajustement (%)",
           "zone_entity": "Entité zone (position géographique)"
         }
       },
@@ -91,6 +101,11 @@
           "strategy_low": "Seuil bas (ouverture)",
           "temp_threshold": "Seuil température (°C)",
           "lit_threshold": "Seuil ensoleillement (%)",
+          "lux_sensors": "Capteurs lux",
+          "lux_area_id": "Zone HA (alternative aux capteurs)",
+          "lux_high": "Seuil haut lux (lx)",
+          "lux_low": "Seuil bas lux (lx)",
+          "lux_step": "Pas d'ajustement (%)",
           "target_illumination": "Cible d'ensoleillement (%)"
         }
       },
