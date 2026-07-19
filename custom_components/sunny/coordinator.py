@@ -6,6 +6,7 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     DOMAIN,
@@ -15,6 +16,14 @@ from .const import (
     DEFAULT_TEMP_THRESHOLD,
     DEFAULT_LIT_THRESHOLD,
     DEFAULT_TARGET_ILLUMINATION,
+    CONF_LUX_SENSORS,
+    CONF_LUX_AREA_ID,
+    CONF_LUX_HIGH,
+    CONF_LUX_LOW,
+    CONF_LUX_STEP,
+    DEFAULT_LUX_HIGH,
+    DEFAULT_LUX_LOW,
+    DEFAULT_LUX_STEP,
 )
 from .solar_math import compute_window
 from .strategies import get_strategy
@@ -34,6 +43,111 @@ class SunnyCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=interval),
         )
         self.entry = entry
+
+    def _resolve_lux_sensors(self, win: dict) -> list[str]:
+        """Résout la liste des capteurs lux pour une fenêtre.
+
+        Priorité : lux_sensors (explicite) > lux_area_id (découverte zone HA).
+        """
+        explicit = win.get("lux_sensors", [])
+        if explicit:
+            return [e for e in explicit if isinstance(e, str) and e]
+
+        area_id = win.get("lux_area_id")
+        if not area_id:
+            return []
+
+        ent_reg = er.async_get(self.hass)
+        sensors = []
+        for entity in ent_reg.entities.values():
+            if (
+                entity.domain == "sensor"
+                and entity.area_id == area_id
+                and entity.device_class == "illuminance"
+                and not entity.disabled
+            ):
+                sensors.append(entity.entity_id)
+        return sensors
+
+    def _compute_lux_target_position(self, win: dict, strategy) -> int:
+        """Calcule la position pour une fenêtre en stratégie lux_target.
+
+        Retourne la position inchangée si aucun capteur frais.
+        """
+        cover_entity = win.get("cover_entity", "")
+        cover_state = self.hass.states.get(cover_entity)
+        current_position = 100
+        cover_last_changed = None
+        if cover_state is not None:
+            pos = cover_state.attributes.get("current_position")
+            if pos is not None:
+                try:
+                    current_position = int(float(pos))
+                except (ValueError, TypeError):
+                    pass
+            cover_last_changed = cover_state.last_changed
+
+        sensor_ids = self._resolve_lux_sensors(win)
+        if not sensor_ids:
+            _LOGGER.warning(
+                "Aucun capteur lux trouvé pour la fenêtre '%s' (lux_sensors=%s, lux_area_id=%s)",
+                win.get("name", "Inconnue"),
+                win.get("lux_sensors", []),
+                win.get("lux_area_id"),
+            )
+            return current_position
+
+        fresh_values = []
+        stale_count = 0
+        for sid in sensor_ids:
+            sensor_state = self.hass.states.get(sid)
+            if sensor_state is None:
+                _LOGGER.debug("Capteur lux '%s' introuvable", sid)
+                continue
+            if cover_last_changed is not None and sensor_state.last_updated <= cover_last_changed:
+                stale_count += 1
+                _LOGGER.debug(
+                    "Capteur lux '%s' stale (last_updated=%s <= cover.last_changed=%s)",
+                    sid, sensor_state.last_updated, cover_last_changed,
+                )
+                continue
+            try:
+                val = float(sensor_state.state)
+                fresh_values.append(val)
+                _LOGGER.debug(
+                    "Capteur lux '%s' frais : %s lx (last_updated=%s)",
+                    sid, val, sensor_state.last_updated,
+                )
+            except (ValueError, TypeError):
+                _LOGGER.debug("Capteur lux '%s' valeur non numérique: %s", sid, sensor_state.state)
+
+        if not fresh_values:
+            _LOGGER.info(
+                "Aucun capteur frais pour la fenêtre '%s' (%d stale sur %d), position inchangée à %d",
+                win.get("name", "Inconnue"), stale_count, len(sensor_ids), current_position,
+            )
+            return current_position
+
+        lux_value = sum(fresh_values) / len(fresh_values)
+        _LOGGER.debug(
+            "Lux agrégé pour '%s': %.0f lx (moyenne de %d capteurs)",
+            win.get("name", "Inconnue"), lux_value, len(fresh_values),
+        )
+
+        data = {
+            "lux_value": lux_value,
+            "current_position": current_position,
+            "lux_high": win.get("lux_high", DEFAULT_LUX_HIGH),
+            "lux_low": win.get("lux_low", DEFAULT_LUX_LOW),
+            "lux_step": win.get("lux_step", DEFAULT_LUX_STEP),
+        }
+        new_position = strategy.compute_position(data)
+        if new_position != current_position:
+            _LOGGER.info(
+                "Lux target '%s': lux=%.0f lx, position %d → %d",
+                win.get("name", "Inconnue"), lux_value, current_position, new_position,
+            )
+        return new_position
 
     async def _async_update_data(self) -> dict:
         sun = self.hass.states.get("sun.sun")
@@ -108,7 +222,10 @@ class SunnyCoordinator(DataUpdateCoordinator):
             strategy_name = win.get("strategy", "block_all")
             strategy = get_strategy(strategy_name)
             data["strategy"] = strategy_name
-            data["desired_position"] = strategy.compute_position(data)
+            if strategy_name == "lux_target":
+                data["desired_position"] = self._compute_lux_target_position(win, strategy)
+            else:
+                data["desired_position"] = strategy.compute_position(data)
             data["cloud_coverage"] = weather_data["cloud_coverage"]
             data["weather_condition"] = weather_data["weather_condition"]
             data["temperature"] = weather_data["temperature"]
