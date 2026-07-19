@@ -134,6 +134,10 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         ))
 
         if self._expecting_position:
+            _LOGGER.info(
+                "sunny: _on_cover_state_change supprimé (expecting), pos=%s target=%s",
+                new_position, self._last_sent_position,
+            )
             if abs(new_position - self._last_sent_position) <= threshold:
                 self._expecting_position = False
                 self._last_sent_from = None
