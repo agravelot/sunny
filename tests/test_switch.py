@@ -554,6 +554,174 @@ class TestOnCoverStateChange:
         assert s._command_target == 0
         s.async_write_ha_state.assert_not_called()
 
+    def test_command_target_suppresses_without_old_state(self, mock_hass):
+        """Quand old_state est absent, la détection de position fonctionne."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("0"))
+
+        assert s._attr_is_on is True
+        assert s._command_target is None
+        s.async_write_ha_state.assert_not_called()
+
+    def test_number_to_number_transit_suppressed(self, mock_hass):
+        """Cover qui reporte directement des nombres (pas open/closed)."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "30", old_state_value="50",
+        ))
+
+        assert s._attr_is_on is True
+        assert s._command_target == 0
+        s.async_write_ha_state.assert_not_called()
+
+    def test_number_to_number_destination_clears(self, mock_hass):
+        """Cover numérique : '30' → '0' avec target=0 → clear."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "0", old_state_value="30",
+        ))
+
+        assert s._attr_is_on is True
+        assert s._command_target is None
+        s.async_write_ha_state.assert_not_called()
+
+    # --- full flow regression tests ---
+
+    def test_full_flow_close_then_manual_open_disables(self, mock_hass):
+        """Sunny ferme → transit → destination → ouverture manuelle → auto-disable."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        # Transit : même état, position intermédiaire
+        s._on_cover_state_change(self._event(
+            "open", current_position=7,
+            old_state_value="open", old_current_position=15,
+        ))
+        assert s._attr_is_on is True
+        assert s._command_target == 0
+
+        # Destination : état change, position correspond
+        s._on_cover_state_change(self._event(
+            "closed", current_position=0,
+            old_state_value="open", old_current_position=3,
+        ))
+        assert s._attr_is_on is True
+        assert s._command_target is None
+
+        # Intervention manuelle
+        s.async_write_ha_state.reset_mock()
+        s._on_cover_state_change(self._event(
+            "open", current_position=50,
+            old_state_value="closed", old_current_position=0,
+        ))
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_full_flow_open_then_manual_close_disables(self, mock_hass):
+        """Sunny ouvre → transit → destination → fermeture manuelle → auto-disable."""
+        s = self._make_switch(mock_hass, desired_position=100)
+        s._attr_is_on = True
+        s._command_target = 100
+        s._command_threshold = 3
+
+        # Transit
+        s._on_cover_state_change(self._event(
+            "open", current_position=30,
+            old_state_value="closed", old_current_position=0,
+        ))
+        assert s._attr_is_on is True
+        assert s._command_target == 100
+
+        # Destination
+        s._on_cover_state_change(self._event(
+            "open", current_position=100,
+            old_state_value="open", old_current_position=97,
+        ))
+        assert s._attr_is_on is True
+        assert s._command_target is None
+
+        # Fermeture manuelle
+        s.async_write_ha_state.reset_mock()
+        s._on_cover_state_change(self._event(
+            "open", current_position=30,
+            old_state_value="open", old_current_position=100,
+        ))
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
+    def test_turn_off_during_transit_clears_target(self, mock_hass):
+        """Turn off pendant le transit → _command_target est clear, détection armée."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "open", current_position=7,
+            old_state_value="open", old_current_position=15,
+        ))
+        assert s._command_target == 0
+
+        # L'utilisateur désactive manuellement
+        s._attr_is_on = False
+        s._command_target = None
+
+        # Changement d'état suivant
+        s._on_cover_state_change(self._event(
+            "closed", current_position=0,
+            old_state_value="open", old_current_position=3,
+        ))
+        assert s._attr_is_on is False
+
+    def test_transit_with_opening_closing_states(self, mock_hass):
+        """Cover qui utilise les états 'opening'/'closing'."""
+        s = self._make_switch(mock_hass, desired_position=100)
+        s._attr_is_on = True
+        s._command_target = 100
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "opening", current_position=50,
+            old_state_value="opening", old_current_position=30,
+        ))
+        assert s._attr_is_on is True
+        assert s._command_target == 100
+
+        s._on_cover_state_change(self._event(
+            "open", current_position=100,
+            old_state_value="opening", old_current_position=97,
+        ))
+        assert s._attr_is_on is True
+        assert s._command_target is None
+
+    def test_command_target_without_coordinator_data(self, mock_hass):
+        """Quand les données coordinator sont vides, command_target supprime quand même."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s.coordinator.data = {}
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("25"))
+
+        assert s._attr_is_on is True
+        assert s._command_target == 0
+        s.async_write_ha_state.assert_not_called()
+
     # --- manual detection ---
 
     def test_manual_change_disables(self, mock_hass):
