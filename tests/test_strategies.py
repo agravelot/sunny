@@ -383,6 +383,82 @@ class TestAlwaysOpenStrategy:
 
 
 # -----------------------------------------------------------------------
+# LuxTarget
+# -----------------------------------------------------------------------
+
+class TestLuxTargetStrategy:
+    def test_lux_above_high_closes(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 6000, "current_position": 50, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 40
+
+    def test_lux_below_low_opens(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 2000, "current_position": 50, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 60
+
+    def test_lux_in_deadzone_unchanged(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 4000, "current_position": 50, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 50
+
+    def test_lux_none_unchanged(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": None, "current_position": 50, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 50
+
+    def test_already_closed_stays_closed(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 6000, "current_position": 0, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 0
+
+    def test_already_open_stays_open(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 2000, "current_position": 100, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 100
+
+    def test_clamp_near_zero(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 6000, "current_position": 5, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 0
+
+    def test_clamp_near_hundred(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 2000, "current_position": 95, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 100
+
+    def test_custom_step(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 6000, "current_position": 50, "lux_high": 5000, "lux_low": 3000, "lux_step": 20}
+        assert s.compute_position(data) == 30
+
+    def test_custom_thresholds(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 900, "current_position": 50, "lux_high": 1000, "lux_low": 500, "lux_step": 10}
+        assert s.compute_position(data) == 50  # dans la zone morte [500, 1000]
+
+    def test_at_exact_high_boundary(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 5000, "current_position": 50, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 50  # lux == high → dans la zone morte
+
+    def test_at_exact_low_boundary(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 3000, "current_position": 50, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 50  # lux == low → dans la zone morte
+
+    def test_defaults_applied(self):
+        s = strategies.LuxTargetStrategy()
+        pos = s.compute_position({"lux_value": 6000, "current_position": 50})
+        assert pos == 40  # défauts: high=5000, low=3000, step=10
+
+    def test_no_current_position_defaults_to_100(self):
+        s = strategies.LuxTargetStrategy()
+        data = {"lux_value": 2000, "lux_high": 5000, "lux_low": 3000, "lux_step": 10}
+        assert s.compute_position(data) == 100  # current_position défaut 100 → déjà au max
+
+
+# -----------------------------------------------------------------------
 # Registre
 # -----------------------------------------------------------------------
 
