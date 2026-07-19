@@ -75,6 +75,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._self_applying = False
         self._last_sent_position: int | None = None
         self._last_sent_from: int | None = None
+        self._expecting_position = False
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -107,6 +108,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                         self._resolve_position(old_state) if old_state else None
                     )
                     self._last_sent_position = desired_position
+                    self._expecting_position = True
                     self.hass.async_create_task(
                         self._apply_position(cover_entity, desired_position)
                     )
@@ -130,6 +132,12 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         threshold = int(self.coordinator.entry.options.get(
             "position_threshold", DEFAULT_POSITION_THRESHOLD
         ))
+
+        if self._expecting_position:
+            if abs(new_position - self._last_sent_position) <= threshold:
+                self._expecting_position = False
+                self._last_sent_from = None
+            return
 
         if self._last_sent_position is not None:
             if new_position == self._last_sent_position:
@@ -221,6 +229,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                         self._resolve_position(old_state) if old_state else None
                     )
                     self._last_sent_position = desired_position
+                    self._expecting_position = True
                     await self._apply_position(cover_entity, desired_position)
         self.async_write_ha_state()
 

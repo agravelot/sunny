@@ -714,6 +714,71 @@ class TestOnCoverStateChange:
         assert s._attr_is_on is False
         s.async_write_ha_state.assert_called_once()
 
+    def test_expecting_position_blocks_intermediate(self, mock_hass):
+        """Position intermédiaire ignorée quand Sunny attend le transit."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_position = 0
+        s._last_sent_from = None
+        s._expecting_position = True
+
+        s._on_cover_state_change(self._event("25"))
+
+        assert s._attr_is_on is True
+        assert s._expecting_position is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_expecting_position_cleared_at_destination(self, mock_hass):
+        """_expecting_position est clear quand le cover atteint sa destination."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_position = 0
+        s._last_sent_from = None
+        s._expecting_position = True
+
+        s._on_cover_state_change(self._event("0"))
+
+        assert s._attr_is_on is True
+        assert s._expecting_position is False
+        assert s._last_sent_from is None
+        s.async_write_ha_state.assert_not_called()
+
+    def test_expecting_position_cleared_within_threshold(self, mock_hass):
+        """_expecting_position est clear quand le cover est proche de la destination."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_position = 0
+        s._last_sent_from = None
+        s._expecting_position = True
+
+        s._on_cover_state_change(self._event("2"))
+
+        assert s._attr_is_on is True
+        assert s._expecting_position is False
+        assert s._last_sent_from is None
+        s.async_write_ha_state.assert_not_called()
+
+    def test_after_expecting_cleared_manual_change_disables(self, mock_hass):
+        """Après _expecting_position clear, une intervention manuelle désactive."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_position = 0
+        s._last_sent_from = None
+        s._expecting_position = True
+
+        s._on_cover_state_change(self._event("0"))
+        assert s._expecting_position is False
+
+        s.async_write_ha_state.reset_mock()
+        s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
 
 class TestResolvePosition:
     """Tests unitaires pour _resolve_position."""
