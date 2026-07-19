@@ -443,10 +443,13 @@ class TestOnCoverStateChange:
         s.async_write_ha_state = MagicMock()
         return s
 
-    def _event(self, state_value, current_position=None):
+    def _event(self, state_value, current_position=None, old_state_value=None, old_current_position=None):
         new_state = _mock_state(state_value, current_position)
         event = MagicMock()
         event.data = {"new_state": new_state}
+        if old_state_value is not None:
+            old_state = _mock_state(old_state_value, old_current_position)
+            event.data["old_state"] = old_state
         return event
 
     # --- command_target suppression ---
@@ -503,43 +506,52 @@ class TestOnCoverStateChange:
         assert s._command_target == 0
         s.async_write_ha_state.assert_not_called()
 
-    def test_command_target_suppresses_opening_state(self, mock_hass):
-        """État 'opening' supprimé, même si la position correspond à la cible."""
-        s = self._make_switch(mock_hass, desired_position=100)
-        s._attr_is_on = True
-        s._command_target = 100
-        s._command_threshold = 3
-
-        s._on_cover_state_change(self._event("opening", current_position=100))
-
-        assert s._attr_is_on is True
-        assert s._command_target == 100
-        s.async_write_ha_state.assert_not_called()
-
-    def test_command_target_suppresses_closing_state(self, mock_hass):
-        """État 'closing' supprimé, même si la position correspond à la cible."""
+    def test_command_target_suppresses_same_state_different_position(self, mock_hass):
+        """Même état mais position différente → encore en transit → supprimé."""
         s = self._make_switch(mock_hass, desired_position=0)
         s._attr_is_on = True
         s._command_target = 0
         s._command_threshold = 3
 
-        s._on_cover_state_change(self._event("closing", current_position=0))
+        s._on_cover_state_change(self._event(
+            "open", current_position=7,
+            old_state_value="open", old_current_position=15,
+        ))
 
         assert s._attr_is_on is True
         assert s._command_target == 0
         s.async_write_ha_state.assert_not_called()
 
-    def test_command_target_cleared_on_closed_state(self, mock_hass):
-        """État 'closed' avec bonne position → command_target est clear."""
+    def test_command_target_state_changed_position_match(self, mock_hass):
+        """Changement d'état ET position correspond → command_target est clear."""
         s = self._make_switch(mock_hass, desired_position=0)
         s._attr_is_on = True
         s._command_target = 0
         s._command_threshold = 3
 
-        s._on_cover_state_change(self._event("closed", current_position=0))
+        s._on_cover_state_change(self._event(
+            "closed", current_position=0,
+            old_state_value="open", old_current_position=3,
+        ))
 
         assert s._attr_is_on is True
         assert s._command_target is None
+        s.async_write_ha_state.assert_not_called()
+
+    def test_command_target_state_changed_far_from_target_still_suppressed(self, mock_hass):
+        """Changement d'état mais position loin de la cible → supprimé."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "open", current_position=80,
+            old_state_value="closed", old_current_position=0,
+        ))
+
+        assert s._attr_is_on is True
+        assert s._command_target == 0
         s.async_write_ha_state.assert_not_called()
 
     # --- manual detection ---

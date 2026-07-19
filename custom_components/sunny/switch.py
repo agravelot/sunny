@@ -123,7 +123,8 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
 
         # Suppression des événements pendant que le cover rejoint la cible
         if self._command_target is not None:
-            if new_state.state in ("opening", "closing"):
+            old_state = event.data.get("old_state")
+            if old_state is not None and old_state.state == new_state.state:
                 return
             if abs(new_position - self._command_target) <= self._command_threshold:
                 self._command_target = None
