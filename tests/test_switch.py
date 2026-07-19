@@ -503,6 +503,45 @@ class TestOnCoverStateChange:
         assert s._command_target == 0
         s.async_write_ha_state.assert_not_called()
 
+    def test_command_target_suppresses_opening_state(self, mock_hass):
+        """État 'opening' supprimé, même si la position correspond à la cible."""
+        s = self._make_switch(mock_hass, desired_position=100)
+        s._attr_is_on = True
+        s._command_target = 100
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("opening", current_position=100))
+
+        assert s._attr_is_on is True
+        assert s._command_target == 100
+        s.async_write_ha_state.assert_not_called()
+
+    def test_command_target_suppresses_closing_state(self, mock_hass):
+        """État 'closing' supprimé, même si la position correspond à la cible."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("closing", current_position=0))
+
+        assert s._attr_is_on is True
+        assert s._command_target == 0
+        s.async_write_ha_state.assert_not_called()
+
+    def test_command_target_cleared_on_closed_state(self, mock_hass):
+        """État 'closed' avec bonne position → command_target est clear."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event("closed", current_position=0))
+
+        assert s._attr_is_on is True
+        assert s._command_target is None
+        s.async_write_ha_state.assert_not_called()
+
     # --- manual detection ---
 
     def test_manual_change_disables(self, mock_hass):
