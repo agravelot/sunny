@@ -683,6 +683,37 @@ class TestOnCoverStateChange:
         assert s._attr_is_on is True
         s.async_write_ha_state.assert_not_called()
 
+    def test_cover_reaches_destination_resets_last_sent_from(self, mock_hass):
+        """Quand le cover atteint _last_sent_position, _last_sent_from est reset."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_from = 50
+        s._last_sent_position = 0
+
+        s._on_cover_state_change(self._event("0"))
+
+        assert s._attr_is_on is True
+        assert s._last_sent_from is None
+        s.async_write_ha_state.assert_not_called()
+
+    def test_after_transit_reset_manual_change_disables(self, mock_hass):
+        """Après reset de _last_sent_from, une ouverture manuelle désactive. (régression)."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._self_applying = False
+        s._last_sent_from = 50
+        s._last_sent_position = 0
+
+        s._on_cover_state_change(self._event("0"))
+        assert s._last_sent_from is None
+
+        s.async_write_ha_state.reset_mock()
+        s._on_cover_state_change(self._event("50"))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
+
 
 class TestResolvePosition:
     """Tests unitaires pour _resolve_position."""
