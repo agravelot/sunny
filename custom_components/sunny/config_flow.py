@@ -521,7 +521,7 @@ class SunnyOptionsFlow(OptionsFlow):
                     CONF_OBSTACLE_X2: user_input[CONF_OBSTACLE_X2],
                     CONF_OBSTACLE_Y2: user_input[CONF_OBSTACLE_Y2],
                     CONF_OBSTACLE_Z2: user_input[CONF_OBSTACLE_Z2],
-}), _validate_lux_thresholds)
+                })
                 win[CONF_OBSTACLES] = obstacles
                 windows[self._editing] = win
                 self.data[CONF_WINDOWS] = windows
