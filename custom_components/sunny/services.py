@@ -32,7 +32,6 @@ def _find_all_auto_control_switches(hass: HomeAssistant) -> set[str]:
 
 
 def _resolve_area_ids(hass: HomeAssistant, raw_ids: list[str]) -> list[str]:
-    """Résout une liste d'IDs de zones (UUID ou nom) en UUIDs."""
     area_reg = ar.async_get(hass)
     resolved: list[str] = []
     for value in raw_ids:
@@ -67,7 +66,6 @@ async def _handle_set_auto_control(hass: HomeAssistant, call: ServiceCall) -> No
         "switch",
         service,
         {"entity_id": list(entity_ids)},
-        blocking=True,
         context=call.context,
     )
 
@@ -75,9 +73,13 @@ async def _handle_set_auto_control(hass: HomeAssistant, call: ServiceCall) -> No
 def async_register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_SET_AUTO_CONTROL):
         return
+
+    async def _handle(call: ServiceCall) -> None:
+        await _handle_set_auto_control(hass, call)
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_SET_AUTO_CONTROL,
-        _handle_set_auto_control,
+        _handle,
         schema=SCHEMA,
     )
