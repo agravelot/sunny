@@ -81,7 +81,7 @@ class TestLitAtCoverPosition:
     def test_full_sun_with_wall_shadow(self):
         data = _full_sun_data(d_lat=0.4, d_vert=0.3)
         lit = strategies._lit_at_cover_position(data, 100)
-        assert lit == pytest.approx(48.0, abs=0.5)
+        assert lit == pytest.approx(64.0, abs=0.5)
 
     def test_obstacle_partial_shadow(self):
         """Obstacle frontal crée une ombre partielle, store ouvert."""
@@ -95,6 +95,21 @@ class TestLitAtCoverPosition:
         )
         lit = strategies._lit_at_cover_position(data, 100)
         assert lit < 100
+
+    def test_reveal_one_side_only(self):
+        """L'ombre latérale ne doit pas être symétrique des deux côtés."""
+        # W=1.5, d_lat=0.8 → 2*d_lat=1.6 > W → symétrique = 0%
+        # Juste un côté : 1.5-0.8 = 0.7m → 46.7%
+        data = _full_sun_data(
+            solar_altitude=45,
+            gamma=-60,
+            d_lat=0.8,
+            d_vert=0,
+            window_width=1.5,
+            window_height=1.5,
+        )
+        lit = strategies._lit_at_cover_position(data, 100)
+        assert lit > 30  # devrait être ~46.7%
 
     def test_zero_area(self):
         data = _full_sun_data(window_width=0, window_height=0)
@@ -201,6 +216,23 @@ class TestBlockAllStrategy:
         )
         pos = s.compute_position(data)
         assert 0 <= pos <= 100  # position intermédiaire
+
+    def test_side_sun_partial_close(self):
+        """Soleil de côté : l'ombre symétrique vide le masque → pos=100 au lieu de fermer."""
+        s = strategies.BlockAllStrategy()
+        # W=1.5, d_lat=0.8 → 2*d_lat=1.6 > W=1.5 → masque vide (bug symétrique)
+        # Correctif : ombre d'un seul côté → masque non vide → pos < 100
+        data = _full_sun_data(
+            lit_pct=50,
+            solar_altitude=45,
+            gamma=-60,
+            d_lat=0.8,
+            d_vert=0,
+            window_width=1.5,
+            window_height=1.5,
+        )
+        pos = s.compute_position(data)
+        assert pos < 100
 
 
 class TestWinterPassiveStrategy:

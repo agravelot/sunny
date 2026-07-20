@@ -144,9 +144,13 @@ def compute_window(
         x_w = (ix + 0.5) * W / nx
         for iz in range(nz):
             z_w = (iz + 0.5) * Hw / nz
-            # Ombre d'embrasure
-            if x_w < d_lat or x_w > W - d_lat:
-                continue
+            # Ombre d'embrasure (un seul côté, côté du soleil)
+            if gamma >= 0:
+                if x_w > W - d_lat:
+                    continue
+            else:
+                if x_w < d_lat:
+                    continue
             if z_w > Hw - d_vert:
                 continue
             # Obstacles

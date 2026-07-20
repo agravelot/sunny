@@ -209,6 +209,34 @@ class TestComputeWindow:
         assert result["total_altitude"] == 218
         assert result["ground_altitude"] == 208
 
+    def test_reveal_shadow_one_side_only(self):
+        """L'ombre d'embrasure latérale ne doit être que du côté du soleil, pas des deux côtés."""
+        result = solar_math.compute_window(
+            h=45, As=110, An=180,  # gamma = -70°, soleil à gauche
+            W=1.5, Hw=1.5, e=0.30,
+        )
+        assert result["behind"] is False
+        assert result["gamma"] == -70.0
+        assert result["d_lat"] > 0
+        # Avec le bug symétrique : 1.5 - 2*0.824 ≈ -0.15 → 0%
+        # Avec le correctif asymétrique : 1.5 - 0.824 = 0.676 → ~19% (d_vert ~0.877)
+        assert result["lit_pct"] > 10
+
+    def test_reveal_shadow_symmetry(self):
+        """Soleil à gauche vs soleil à droite : lit_pct doit être identique."""
+        left = solar_math.compute_window(
+            h=45, As=120, An=180,  # gamma = -60°
+            W=2, Hw=1.5, e=0.25,
+        )
+        right = solar_math.compute_window(
+            h=45, As=240, An=180,  # gamma = +60°
+            W=2, Hw=1.5, e=0.25,
+        )
+        assert left["behind"] is False
+        assert right["behind"] is False
+        assert left["lit_pct"] > 0
+        assert left["lit_pct"] == right["lit_pct"]
+
 
 def _frontal_obstacle(distance, height):
     """Construit un obstacle frontal équivalent à l'ancien mur-écran."""

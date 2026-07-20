@@ -106,8 +106,12 @@ def _build_shadow_mask(data: dict) -> list[list[bool]]:
         x_w = (ix + 0.5) * W / nx
         for iz in range(nz):
             z_w = (iz + 0.5) * Hw / nz
-            if x_w < d_lat or x_w > W - d_lat:
-                continue
+            if gamma >= 0:
+                if x_w > W - d_lat:
+                    continue
+            else:
+                if x_w < d_lat:
+                    continue
             if z_w > Hw - d_vert:
                 continue
             blocked = False
