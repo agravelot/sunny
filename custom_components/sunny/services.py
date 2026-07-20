@@ -5,7 +5,7 @@ import logging
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers import area_registry as ar, config_validation as cv, entity_registry as er
 
 from .const import DOMAIN
 
@@ -31,10 +31,22 @@ def _find_all_auto_control_switches(hass: HomeAssistant) -> set[str]:
     return entity_ids
 
 
+def _resolve_area_ids(hass: HomeAssistant, raw_ids: list[str]) -> list[str]:
+    """Résout une liste d'IDs de zones (UUID ou nom) en UUIDs."""
+    area_reg = ar.async_get(hass)
+    resolved: list[str] = []
+    for value in raw_ids:
+        if area_reg.async_get_area(value):
+            resolved.append(value)
+        elif (area := area_reg.async_get_area_by_name(value)):
+            resolved.append(area.id)
+    return resolved
+
+
 async def _handle_set_auto_control(hass: HomeAssistant, call: ServiceCall) -> None:
     enabled: bool = call.data["enabled"]
     entity_ids = set(call.data.get("entity_id", []))
-    area_ids = call.data.get("area_id", [])
+    area_ids = _resolve_area_ids(hass, call.data.get("area_id", []))
 
     if area_ids:
         ent_reg = er.async_get(hass)

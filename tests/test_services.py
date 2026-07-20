@@ -22,12 +22,15 @@ ha_config_entries.ConfigEntry = MagicMock
 
 ha_entity_registry = MagicMock()
 
+ha_area_registry = MagicMock()
+
 ha_update_coordinator = MagicMock()
 ha_update_coordinator.DataUpdateCoordinator = MagicMock
 ha_update_coordinator.CoordinatorEntity = MagicMock
 
 ha_helpers = MagicMock()
 ha_helpers.entity_registry = ha_entity_registry
+ha_helpers.area_registry = ha_area_registry
 ha_helpers.config_validation = MagicMock()
 ha_helpers.update_coordinator = ha_update_coordinator
 
@@ -41,6 +44,7 @@ sys.modules["homeassistant.core"] = ha_core
 sys.modules["homeassistant.config_entries"] = ha_config_entries
 sys.modules["homeassistant.helpers"] = ha_helpers
 sys.modules["homeassistant.helpers.entity_registry"] = ha_entity_registry
+sys.modules["homeassistant.helpers.area_registry"] = ha_area_registry
 sys.modules["homeassistant.helpers.config_validation"] = ha_helpers.config_validation
 sys.modules["homeassistant.helpers.update_coordinator"] = ha_update_coordinator
 sys.modules["homeassistant.const"] = MagicMock()
@@ -63,6 +67,28 @@ class _MockEntityEntry:
 def _mock_ent_reg(*entries):
     reg = MagicMock()
     reg.entities = {e.entity_id: e for e in entries}
+    return reg
+
+
+class _MockAreaEntry:
+    def __init__(self, area_id, name):
+        self.id = area_id
+        self.name = name
+
+
+def _mock_area_reg(*entries: _MockAreaEntry):
+    reg = MagicMock()
+    by_id = {a.id: a for a in entries}
+    by_name = {a.name: a for a in entries}
+
+    def _get_area(area_id):
+        return by_id.get(area_id)
+
+    def _get_area_by_name(name):
+        return by_name.get(name)
+
+    reg.async_get_area.side_effect = _get_area
+    reg.async_get_area_by_name.side_effect = _get_area_by_name
     return reg
 
 
@@ -166,6 +192,9 @@ class TestHandleSetAutoControl:
     @pytest.mark.asyncio
     async def test_area_resolution(self):
         hass = _make_hass()
+        ha_area_registry.async_get = MagicMock(
+            return_value=_mock_area_reg(_MockAreaEntry("uuid_salon", "salon"))
+        )
         ha_entity_registry.async_entries_for_area = MagicMock(return_value=[
             _entry("switch.grand_pilotage_auto"),
             _entry("switch.petit_pilotage_auto"),
@@ -183,10 +212,16 @@ class TestHandleSetAutoControl:
         args = hass.services.async_call.call_args
         entity_ids = set(args[0][2]["entity_id"])
         assert entity_ids == {"switch.grand_pilotage_auto", "switch.petit_pilotage_auto"}
+        ha_entity_registry.async_entries_for_area.assert_called_with(
+            ha_entity_registry.async_get.return_value, "uuid_salon"
+        )
 
     @pytest.mark.asyncio
     async def test_entity_and_area_union(self):
         hass = _make_hass()
+        ha_area_registry.async_get = MagicMock(
+            return_value=_mock_area_reg(_MockAreaEntry("uuid_salon", "salon"))
+        )
         ha_entity_registry.async_entries_for_area = MagicMock(return_value=[
             _entry("switch.grand_pilotage_auto"),
         ])
@@ -219,6 +254,9 @@ class TestHandleSetAutoControl:
     @pytest.mark.asyncio
     async def test_empty_area_no_entities(self):
         hass = _make_hass()
+        ha_area_registry.async_get = MagicMock(
+            return_value=_mock_area_reg(_MockAreaEntry("uuid_vide", "vide"))
+        )
         ha_entity_registry.async_entries_for_area = MagicMock(return_value=[])
         ha_entity_registry.async_get = MagicMock(return_value=_mock_ent_reg())
 
@@ -231,6 +269,53 @@ class TestHandleSetAutoControl:
         await svc._handle_set_auto_control(hass, call)
 
         hass.services.async_call.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_area_resolution_by_uuid(self):
+        hass = _make_hass()
+        ha_area_registry.async_get = MagicMock(
+            return_value=_mock_area_reg(_MockAreaEntry("uuid_salon", "salon"))
+        )
+        ha_entity_registry.async_entries_for_area = MagicMock(return_value=[
+            _entry("switch.grand_pilotage_auto"),
+        ])
+
+        call = MagicMock()
+        call.data = {
+            "enabled": True,
+            "area_id": ["uuid_salon"],
+        }
+        call.context = None
+        await svc._handle_set_auto_control(hass, call)
+
+        ha_entity_registry.async_entries_for_area.assert_called_with(
+            ha_entity_registry.async_get.return_value, "uuid_salon"
+        )
+
+    @pytest.mark.asyncio
+    async def test_area_resolution_unknown_name_skipped(self):
+        hass = _make_hass()
+        ha_area_registry.async_get = MagicMock(
+            return_value=_mock_area_reg()
+        )
+        ha_entity_registry.async_entries_for_area = MagicMock()
+        ha_entity_registry.async_get = MagicMock(
+            return_value=_mock_ent_reg(
+                _entry("switch.pilotage_auto"),
+            )
+        )
+
+        call = MagicMock()
+        call.data = {
+            "enabled": True,
+            "area_id": ["zone_inconnue"],
+        }
+        call.context = None
+        await svc._handle_set_auto_control(hass, call)
+
+        ha_entity_registry.async_entries_for_area.assert_not_called()
+        args = hass.services.async_call.call_args
+        assert set(args[0][2]["entity_id"]) == {"switch.pilotage_auto"}
 
     @pytest.mark.asyncio
     async def test_passes_context(self):
