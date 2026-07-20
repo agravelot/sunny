@@ -117,7 +117,7 @@ def _validate_lux_thresholds(values: dict) -> dict:
 def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     if defaults is None:
         defaults = {}
-    return vol.All(vol.Schema({
+    return vol.Schema({
         vol.Required(CONF_WINDOW_NAME, default=defaults.get(CONF_WINDOW_NAME, DEFAULT_NAME)): str,
         vol.Required(CONF_COVER_ENTITY, default=defaults.get(CONF_COVER_ENTITY)):
             EntitySelector(EntitySelectorConfig(domain="cover")),
@@ -160,7 +160,7 @@ def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.All(vol.Coerce(float), vol.Range(min=100, max=100000)),
         vol.Optional(CONF_LUX_STEP, default=defaults.get(CONF_LUX_STEP, DEFAULT_LUX_STEP)):
             vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
-    }), _validate_lux_thresholds)
+    })
 
 
 def _build_weather_schema() -> vol.Schema:
@@ -246,12 +246,20 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             name = user_input.get(CONF_WINDOW_NAME, DEFAULT_NAME)
             cover_entity_id = user_input.get(CONF_COVER_ENTITY, "")
 
+            try:
+                user_input = _validate_lux_thresholds(user_input)
+            except vol.Invalid:
+                errors["lux_high"] = "lux_threshold_invalid"
+
             if name == DEFAULT_NAME and cover_entity_id:
                 name = _get_cover_friendly_name(self.hass, cover_entity_id)
                 user_input[CONF_WINDOW_NAME] = name
 
             if _is_window_name_duplicate(self.data[CONF_WINDOWS], name):
                 errors[CONF_WINDOW_NAME] = "duplicate_name"
+
+            if errors:
+                pass
             else:
                 win: dict[str, Any] = dict(user_input)
                 win[CONF_WINDOW_ID] = win.get(CONF_COVER_ENTITY, "")
@@ -365,11 +373,20 @@ class SunnyOptionsFlow(OptionsFlow):
         if user_input is not None:
             name = user_input.get(CONF_WINDOW_NAME, DEFAULT_NAME)
 
+            errors: dict[str, str] = {}
+            try:
+                user_input = _validate_lux_thresholds(user_input)
+            except vol.Invalid:
+                errors["lux_high"] = "lux_threshold_invalid"
+
             if _is_window_name_duplicate(self.data[CONF_WINDOWS], name, exclude_idx=self._editing):
+                errors[CONF_WINDOW_NAME] = "duplicate_name"
+
+            if errors:
                 return self.async_show_form(
                     step_id="edit_window",
                     data_schema=_build_window_schema(user_input),
-                    errors={CONF_WINDOW_NAME: "duplicate_name"},
+                    errors=errors,
                 )
 
             self.data[CONF_WINDOWS][self._editing] = dict(user_input)
@@ -393,12 +410,20 @@ class SunnyOptionsFlow(OptionsFlow):
             name = user_input.get(CONF_WINDOW_NAME, DEFAULT_NAME)
             cover_entity_id = user_input.get(CONF_COVER_ENTITY, "")
 
+            try:
+                user_input = _validate_lux_thresholds(user_input)
+            except vol.Invalid:
+                errors["lux_high"] = "lux_threshold_invalid"
+
             if name == DEFAULT_NAME and cover_entity_id:
                 name = _get_cover_friendly_name(self.hass, cover_entity_id)
                 user_input[CONF_WINDOW_NAME] = name
 
             if _is_window_name_duplicate(self.data[CONF_WINDOWS], name):
                 errors[CONF_WINDOW_NAME] = "duplicate_name"
+
+            if errors:
+                pass
             else:
                 win = dict(user_input)
                 win[CONF_WINDOW_ID] = win.get(CONF_COVER_ENTITY, "")

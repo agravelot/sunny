@@ -2,7 +2,8 @@
   "title": "Sunny",
   "config": {
     "error": {
-      "duplicate_name": "Une fenêtre avec ce nom existe déjà"
+      "duplicate_name": "Une fenêtre avec ce nom existe déjà",
+      "lux_threshold_invalid": "lux_high doit être supérieur à lux_low"
     },
     "step": {
       "user": {
@@ -49,7 +50,8 @@
   },
   "options": {
     "error": {
-      "duplicate_name": "Une fenêtre avec ce nom existe déjà"
+      "duplicate_name": "Une fenêtre avec ce nom existe déjà",
+      "lux_threshold_invalid": "lux_high doit être supérieur à lux_low"
     },
     "step": {
       "init": {
