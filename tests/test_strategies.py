@@ -522,3 +522,45 @@ class TestRegistry:
 
     def test_instances_are_singletons(self):
         assert strategies.get_strategy("threshold") is strategies.STRATEGIES["threshold"]
+
+
+class TestReliefAngleBehind:
+    """Vérifie que les stratégies réagissent correctement à behind=True via relief_angle."""
+
+    def _behind_from_relief(self, **kw) -> dict:
+        data = _full_sun_data(**kw)
+        data["behind"] = True
+        data["lit_pct"] = 0.0
+        data["relief_angle"] = 3.0
+        data["solar_altitude"] = 2.0  # en dessous de relief_angle=3
+        return data
+
+    def test_block_all_opens_when_behind(self):
+        s = strategies.BlockAllStrategy()
+        assert s.compute_position(self._behind_from_relief()) == 100
+
+    def test_winter_passive_closes_when_no_sun(self):
+        s = strategies.WinterPassiveStrategy()
+        assert s.compute_position(self._behind_from_relief()) == 0
+
+    def test_proportional_opens_when_no_sun(self):
+        s = strategies.ProportionalStrategy()
+        assert s.compute_position(self._behind_from_relief()) == 100
+
+    def test_temperature_guard_opens_when_behind(self):
+        s = strategies.TemperatureGuardStrategy()
+        pos = s.compute_position(self._behind_from_relief(temperature=30))
+        assert pos == 100  # behind=True → ouvert quelle que soit la température
+
+    def test_privacy_night_stays_open_in_day(self):
+        s = strategies.PrivacyNightStrategy()
+        # h=2 > 0 → jour, même si behind
+        assert s.compute_position(self._behind_from_relief()) == 100
+
+    def test_always_closed_ignores_behind(self):
+        s = strategies.AlwaysClosedStrategy()
+        assert s.compute_position(self._behind_from_relief()) == 0
+
+    def test_always_open_ignores_behind(self):
+        s = strategies.AlwaysOpenStrategy()
+        assert s.compute_position(self._behind_from_relief()) == 100

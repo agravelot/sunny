@@ -357,3 +357,75 @@ class TestObstacles:
             obstacles=[],
         )
         assert approx(result_small["lit_pct"]) == 100.0
+
+
+class TestReliefAngle:
+    def test_relief_blocks_sun_below(self):
+        """Soleil sous l'angle de relief → behind."""
+        result = solar_math.compute_window(
+            h=2, As=180, An=180, W=2, Hw=1.5, e=0,
+            relief_angle=5.0,
+        )
+        assert result["behind"] is True
+        assert result["lit_pct"] == 0.0
+
+    def test_relief_passes_sun_above(self):
+        """Soleil au-dessus de l'angle de relief → pas behind."""
+        result = solar_math.compute_window(
+            h=10, As=180, An=180, W=2, Hw=1.5, e=0,
+            relief_angle=5.0,
+        )
+        assert result["behind"] is False
+        assert result["lit_pct"] > 0
+
+    def test_relief_zero_no_effect(self):
+        """relief_angle=0 ne bloque pas (compatibilité ascendante)."""
+        result = solar_math.compute_window(
+            h=0.5, As=180, An=180, W=2, Hw=1.5, e=0,
+            relief_angle=0.0,
+        )
+        assert result["behind"] is False
+        assert result["lit_pct"] > 0
+
+    def test_relief_at_exact_boundary(self):
+        """h == relief_angle → pas behind (strictement inférieur requis)."""
+        result = solar_math.compute_window(
+            h=5, As=180, An=180, W=2, Hw=1.5, e=0,
+            relief_angle=5.0,
+        )
+        assert result["behind"] is False
+
+    def test_relief_combined_with_dip(self):
+        """relief_angle et dip horizon combinés."""
+        # altitude 2000m → dip ≈ 1.44°, relief_angle=3
+        # h=2 > dip(-1.44) MAIS h=2 < relief_angle(3) → behind
+        result = solar_math.compute_window(
+            h=2, As=180, An=180, W=2, Hw=1.5, e=0.25,
+            altitude=500, ground_altitude=1500, relief_angle=3.0,
+        )
+        assert result["behind"] is True
+        assert result["lit_pct"] == 0.0
+
+    def test_relief_combined_with_azimuth_block(self):
+        """relief_angle ET azimut derrière."""
+        result = solar_math.compute_window(
+            h=10, As=300, An=180, W=2, Hw=1.5, e=0.25,
+            relief_angle=5.0,
+        )
+        assert result["behind"] is True  # azimuth block takes priority
+
+    def test_relief_angle_in_result(self):
+        """Le relief_angle est présent dans le dict résultat."""
+        result = solar_math.compute_window(
+            h=45, As=180, An=180, W=2, Hw=1.5, e=0,
+            relief_angle=3.0,
+        )
+        assert result["relief_angle"] == 3.0
+
+    def test_default_relief_angle_zero(self):
+        """Le défaut de relief_angle dans compute_window est 0."""
+        result = solar_math.compute_window(
+            h=0.5, As=180, An=180, W=2, Hw=1.5, e=0,
+        )
+        assert result["relief_angle"] == 0.0
+        assert result["behind"] is False

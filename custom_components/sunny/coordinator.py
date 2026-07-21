@@ -11,6 +11,7 @@ from homeassistant.helpers import entity_registry as er
 from .const import (
     DOMAIN,
     DEFAULT_REFRESH_INTERVAL,
+    DEFAULT_RELIEF_ANGLE,
     DEFAULT_STRATEGY_HIGH,
     DEFAULT_STRATEGY_LOW,
     DEFAULT_TEMP_THRESHOLD,
@@ -198,6 +199,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
             obstacles = win.get("obstacles", [])
             alt = win.get("altitude", 10)
             ground_alt = win.get("ground_altitude", 208)
+            relief_angle = win.get("relief_angle", DEFAULT_RELIEF_ANGLE)
 
             try:
                 data = compute_window(
@@ -205,6 +207,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                     W=width, Hw=height, e=wall,
                     obstacles=obstacles, altitude=alt,
                     ground_altitude=ground_alt,
+                    relief_angle=relief_angle,
                 )
             except Exception:
                 _LOGGER.exception(

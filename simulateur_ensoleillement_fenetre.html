@@ -270,6 +270,10 @@
           <label>Épaisseur du mur / embrasure (m) <span class="val" id="v-e">0.25</span></label>
           <input type="range" id="ewall" min="0" max="0.8" step="0.02" value="0.25">
         </div>
+        <div class="field">
+          <label>Angle de relief (élévation min. soleil) <span class="val" id="v-relief">3°</span></label>
+          <input type="range" id="relief-angle" min="0" max="45" step="0.5" value="3">
+        </div>
       </div>
 
       <div class="panel">
@@ -398,11 +402,12 @@ function computeAll(){
   const altitudeSol=parseFloat($('altitude-sol').value);
   const altitudeFenetre=parseFloat($('altitude').value);
   const altitudeTotale=altitudeSol+altitudeFenetre;
+  const reliefAngle=parseFloat($('relief-angle').value);
 
   const dip=altitudeTotale>0 ? r2d(Math.acos(6371/(6371+altitudeTotale/1000))) : 0;
 
   let gamma=normAngle180(As-An);
-  const behind = h<=-dip || Math.abs(gamma)>=90;
+  const behind = (reliefAngle > 0 && h < reliefAngle) || h<=-dip || Math.abs(gamma)>=90;
 
   let theta=null, hp=null, dLat=0, dVert=0, Wutile=W, Hutile=Hw, yOmbre=0, screenBlocksAll=false;
 
@@ -479,6 +484,7 @@ if(useScreen){
   }
 
   return {lat,N,hour,h,As,An,W,Hw,e,useScreen,D,Hm,altitudeSol,altitudeFenetre,altitudeTotale,dip,gamma,behind,theta,hp,dLat,dVert,Wutile,Hutile,yOmbre,screenBlocksAll,litHeight,litWidth,pct,
+    reliefAngle,
     coverPos,tiltThreshold,slatTransmission:slatTransmission*100,coverY,coverPhase,coverLitPct,coverLitArea};
 }
 
@@ -487,6 +493,10 @@ function fmt(v,d=1){ return isFinite(v)? v.toFixed(d) : '—'; }
 function renderMetrics(r){
   const el=$('metrics');
   const rows=[
+    ['Altitude du sol', fmt(r.altitudeSol,0)+' m'],
+    ['Hauteur fenêtre', fmt(r.altitudeFenetre,0)+' m'],
+    ['Dip horizon', fmt(r.dip,1)+'°'],
+    ['Angle de relief', fmt(r.reliefAngle,1)+'°'],
     ['Altitude solaire h', fmt(r.h)+'°'],
     ['Azimut solaire As', fmt(r.As)+'°'],
     ['Écart azimutal γ', fmt(r.gamma)+'°'],
@@ -509,9 +519,13 @@ function renderStatus(r){
   const el=$('status');
   if(r.behind){
     el.className='status bad';
-    el.textContent = r.h<=-r.dip
-      ? "Soleil sous l'horizon — aucune lumière directe."
-      : "Le soleil est derrière le plan de façade (|γ| ≥ 90°) — aucune lumière directe.";
+    if(r.reliefAngle > 0 && r.h < r.reliefAngle){
+      el.textContent = `Soleil sous l'angle de relief (${r.reliefAngle.toFixed(1)}°) — masqué par le relief/terrain.`;
+    } else if(r.h<=-r.dip){
+      el.textContent = "Soleil sous l'horizon — aucune lumière directe.";
+    } else {
+      el.textContent = "Le soleil est derrière le plan de façade (|γ| ≥ 90°) — aucune lumière directe.";
+    }
   } else if(r.screenBlocksAll){
     el.className='status bad';
     el.textContent = 'Le mur écran masque entièrement le rayon direct à cette heure.';
@@ -726,7 +740,7 @@ function fmtHHMM(hour){
   const hFloor=Math.floor(hour), hMin=Math.round((hour-hFloor)*60);
   return String(hFloor).padStart(2,'0')+':'+String(hMin).padStart(2,'0');
 }
-['lat','lon','altitude','altitude-sol','hour','wwin','hwin','ewall','dscreen','hmscreen','orientc','cover-pos','tilt-threshold','slat-transmission'].forEach(id=>{
+['lat','lon','altitude','altitude-sol','hour','wwin','hwin','ewall','relief-angle','dscreen','hmscreen','orientc','cover-pos','tilt-threshold','slat-transmission'].forEach(id=>{
   $(id).addEventListener('input', ()=>{
     $('v-lat').textContent = parseFloat($('lat').value).toFixed(2)+'°';
     $('v-lon').textContent = parseFloat($('lon').value).toFixed(2)+'°';
@@ -736,6 +750,7 @@ function fmtHHMM(hour){
     $('v-w').textContent = parseFloat($('wwin').value).toFixed(2);
     $('v-h').textContent = parseFloat($('hwin').value).toFixed(2);
     $('v-e').textContent = parseFloat($('ewall').value).toFixed(2);
+    $('v-relief').textContent = parseFloat($('relief-angle').value).toFixed(0)+'°';
     $('v-d').textContent = parseFloat($('dscreen').value).toFixed(1);
     $('v-hm').textContent = parseFloat($('hmscreen').value).toFixed(1);
     $('v-orientc').textContent = parseFloat($('orientc').value).toFixed(0)+'°';
@@ -787,6 +802,7 @@ function saveGeo(){
     localStorage.setItem('geo_lon',$('lon').value);
     localStorage.setItem('geo_alt',$('altitude').value);
     localStorage.setItem('geo_altsol',$('altitude-sol').value);
+    localStorage.setItem('geo_relief',$('relief-angle').value);
   }catch(e){}
 }
 function loadGeo(){
@@ -795,14 +811,17 @@ function loadGeo(){
     const lonVal=localStorage.getItem('geo_lon');
     const altVal=localStorage.getItem('geo_alt');
     const altSolVal=localStorage.getItem('geo_altsol');
+    const reliefVal=localStorage.getItem('geo_relief');
     if(latVal!=null) $('lat').value=latVal;
     if(lonVal!=null) $('lon').value=lonVal;
     if(altVal!=null) $('altitude').value=altVal;
     if(altSolVal!=null) $('altitude-sol').value=altSolVal;
+    if(reliefVal!=null) $('relief-angle').value=reliefVal;
     $('v-lat').textContent=parseFloat($('lat').value).toFixed(2)+'°';
     $('v-lon').textContent=parseFloat($('lon').value).toFixed(2)+'°';
     $('v-alt-sol').textContent=parseInt($('altitude-sol').value)+' m';
     $('v-alt').textContent=parseInt($('altitude').value)+' m';
+    $('v-relief').textContent=parseFloat($('relief-angle').value).toFixed(0)+'°';
   }catch(e){}
 }
 loadGeo();

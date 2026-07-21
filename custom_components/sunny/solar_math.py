@@ -81,10 +81,11 @@ def compute_window(
     obstacles: list[dict] | None = None,
     altitude: float = 0.0,
     ground_altitude: float = 0.0,
+    relief_angle: float = 0.0,
 ) -> dict:
     dip = horizon_dip(ground_altitude + altitude)
     gamma = norm_angle180(As - An)
-    behind = h <= -dip or abs(gamma) >= 90
+    behind = (relief_angle > 0 and h < relief_angle) or h <= -dip or abs(gamma) >= 90
 
     if obstacles is None:
         obstacles = []
@@ -100,6 +101,7 @@ def compute_window(
         "horizon_dip": dip,
         "ground_altitude": ground_altitude,
         "total_altitude": ground_altitude + altitude,
+        "relief_angle": relief_angle,
         "hp": None,
         "theta": None,
         "d_lat": 0.0,

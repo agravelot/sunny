@@ -41,6 +41,7 @@ from .const import (
     CONF_OBSTACLE_Z2,
     CONF_TILT_THRESHOLD,
     CONF_SLAT_TRANSMISSION,
+    CONF_RELIEF_ANGLE,
     CONF_ALTITUDE,
     CONF_GROUND_ALTITUDE,
     CONF_ZONE_ENTITY,
@@ -69,6 +70,7 @@ from .const import (
     DEFAULT_OBSTACLE_Z2,
     DEFAULT_TILT_THRESHOLD,
     DEFAULT_SLAT_TRANSMISSION,
+    DEFAULT_RELIEF_ANGLE,
     DEFAULT_ALTITUDE,
     DEFAULT_GROUND_ALTITUDE,
     DEFAULT_STRATEGY,
@@ -137,6 +139,8 @@ def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.All(vol.Coerce(float), vol.Range(min=0.0, max=500.0)),
         vol.Required(CONF_GROUND_ALTITUDE, default=defaults.get(CONF_GROUND_ALTITUDE, DEFAULT_GROUND_ALTITUDE)):
             vol.All(vol.Coerce(float), vol.Range(min=0.0, max=3000.0)),
+        vol.Required(CONF_RELIEF_ANGLE, default=defaults.get(CONF_RELIEF_ANGLE, DEFAULT_RELIEF_ANGLE)):
+            vol.All(vol.Coerce(float), vol.Range(min=0.0, max=45.0)),
         vol.Required(CONF_STRATEGY, default=defaults.get(CONF_STRATEGY, DEFAULT_STRATEGY)): vol.In(STRATEGY_OPTIONS),
         vol.Optional(CONF_STRATEGY_HIGH, default=defaults.get(CONF_STRATEGY_HIGH, DEFAULT_STRATEGY_HIGH)):
             vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
