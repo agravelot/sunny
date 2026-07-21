@@ -429,3 +429,34 @@ class TestReliefAngle:
         )
         assert result["relief_angle"] == 0.0
         assert result["behind"] is False
+
+    def test_relief_blocks_ignores_obstacles(self):
+        """Quand le relief bloque, les obstacles ne sont pas évalués (sortie précoce)."""
+        result = solar_math.compute_window(
+            h=3, As=180, An=180, W=2, Hw=1.5, e=0,
+            relief_angle=5.0,
+            obstacles=[_frontal_obstacle(1, 10)],
+        )
+        assert result["behind"] is True
+        assert result["lit_pct"] == 0.0
+        assert len(result["obstacles"]) == 1
+
+    def test_obstacles_block_when_relief_does_not(self):
+        """Soleil au-dessus du relief mais obstacles présents → ombre partielle."""
+        result = solar_math.compute_window(
+            h=10, As=180, An=180, W=2, Hw=1.5, e=0,
+            relief_angle=5.0,
+            obstacles=[_frontal_obstacle(3, 2)],
+        )
+        assert result["behind"] is False
+        assert 0 < result["lit_pct"] < 100
+
+    def test_relief_and_frontal_obstacle_both_pass(self):
+        """Ni le relief ni l'obstacle ne bloquent → plein soleil."""
+        result = solar_math.compute_window(
+            h=60, As=180, An=180, W=2, Hw=1.5, e=0,
+            relief_angle=3.0,
+            obstacles=[_frontal_obstacle(3, 1)],
+        )
+        assert result["behind"] is False
+        assert result["lit_pct"] == 100.0
