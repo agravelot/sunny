@@ -235,9 +235,9 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 data["desired_position"] = self._compute_lux_target_position(win, strategy)
             else:
                 data["desired_position"] = strategy.compute_position(data)
-                min_pos = int(win.get(CONF_MIN_POSITION, DEFAULT_MIN_POSITION))
-                max_pos = int(win.get(CONF_MAX_POSITION, DEFAULT_MAX_POSITION))
-                data["desired_position"] = max(min_pos, min(max_pos, data["desired_position"]))
+            min_pos = int(win.get(CONF_MIN_POSITION, DEFAULT_MIN_POSITION))
+            max_pos = int(win.get(CONF_MAX_POSITION, DEFAULT_MAX_POSITION))
+            data["desired_position"] = max(min_pos, min(max_pos, data["desired_position"]))
             data["cloud_coverage"] = weather_data["cloud_coverage"]
             data["weather_condition"] = weather_data["weather_condition"]
             data["temperature"] = weather_data["temperature"]
