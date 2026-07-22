@@ -25,6 +25,10 @@ from .const import (
     DEFAULT_LUX_HIGH,
     DEFAULT_LUX_LOW,
     DEFAULT_LUX_STEP,
+    CONF_MIN_POSITION,
+    CONF_MAX_POSITION,
+    DEFAULT_MIN_POSITION,
+    DEFAULT_MAX_POSITION,
 )
 from .solar_math import compute_window
 from .strategies import get_strategy
@@ -231,6 +235,9 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 data["desired_position"] = self._compute_lux_target_position(win, strategy)
             else:
                 data["desired_position"] = strategy.compute_position(data)
+                min_pos = int(win.get(CONF_MIN_POSITION, DEFAULT_MIN_POSITION))
+                max_pos = int(win.get(CONF_MAX_POSITION, DEFAULT_MAX_POSITION))
+                data["desired_position"] = max(min_pos, min(max_pos, data["desired_position"]))
             data["cloud_coverage"] = weather_data["cloud_coverage"]
             data["weather_condition"] = weather_data["weather_condition"]
             data["temperature"] = weather_data["temperature"]
