@@ -36,3 +36,21 @@ jobs:
           python-version: "3.13"
       - run: pip install pytest pytest-asyncio
       - run: python3 -m pytest tests/ -v
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff yamllint
+      - name: Ruff lint check
+        run: ruff check --output-format github
+        continue-on-error: true
+      - name: Ruff format check
+        run: ruff format --check
+        continue-on-error: true
+      - name: YAML lint
+        run: yamllint .github/ hacs.json
+        continue-on-error: true
