@@ -9,7 +9,7 @@ from .const import DOMAIN
 from .coordinator import SunnyCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["sensor", "select", "switch"]
+PLATFORMS = ["sensor", "select", "switch", "number"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
