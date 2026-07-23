@@ -211,6 +211,9 @@ def _cleanup_window_entities(
         ("sensor", "cloud"),
         ("select", "strategy_select"),
         ("switch", "auto_control"),
+        ("number", "min_position"),
+        ("number", "max_position"),
+        ("button", "reset_bounds"),
     ]:
         unique_id = f"{entry_id}_{window_id}_{window_name}_{suffix}"
         entity_id = ent_reg.async_get_entity_id(domain, DOMAIN, unique_id)
