@@ -8,7 +8,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_entity_registry_updated_event
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
@@ -74,7 +73,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class SunnyBasePositionNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
+class SunnyBasePositionNumber(CoordinatorEntity, NumberEntity):
     """Classe de base pour les entités number de bornes."""
 
     _attr_has_entity_name = True
@@ -130,16 +129,6 @@ class SunnyBasePositionNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
             self.coordinator.entry.entry_id
         )
         await self.coordinator.async_request_refresh()
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None and last_state.state not in ("unavailable", "unknown"):
-            try:
-                await self.async_set_native_value(float(last_state.state))
-            except (ValueError, TypeError):
-                pass
-
 
 class SunnyMinPositionNumber(SunnyBasePositionNumber):
     """Entité number pour la position minimale désirée."""
