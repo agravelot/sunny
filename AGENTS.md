@@ -55,6 +55,7 @@ custom_components/sunny/
 ## Geographic position
 
 The `latitude`/`longitude` fields do **not** exist in window config. The coordinator resolves them dynamically:
+
 - If `zone_entity` is set → `zone.attributes["latitude"]` / `zone.attributes["longitude"]`
 - Otherwise → `hass.config.latitude` / `hass.config.longitude`
 
@@ -68,12 +69,19 @@ The `latitude`/`longitude` fields do **not** exist in window config. The coordin
 
 - Tests do **not** import Home Assistant (no `homeassistant.*`). `solar_math.py` and `strategies.py` have no HA dependencies.
 - Direct import via `sys.path` hack:
+
   ```python
   SRC = Path(__file__).resolve().parent.parent / "custom_components" / "sunny"
   sys.path.insert(0, str(SRC))
   import solar_math
   ```
+
 - `pytest.ini` enables `asyncio_mode = auto` for potential async tests.
+
+## Références
+
+- `git@github.com:home-assistant/core.git` (branche `dev`) — Home Assistant core. APIs, entités, config flows, helpers, loader, etc.
+- `git@github.com:home-assistant/developers.home-assistant.git` — Documentation officielle du développement HA (Docusaurus).
 
 ## Simulator
 
