@@ -29,6 +29,8 @@ from .const import (
     CONF_MAX_POSITION,
     DEFAULT_MIN_POSITION,
     DEFAULT_MAX_POSITION,
+    CONF_STAGGER_DELAY,
+    DEFAULT_STAGGER_DELAY,
 )
 from .solar_math import compute_window
 from .strategies import get_strategy
@@ -48,6 +50,10 @@ class SunnyCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=interval),
         )
         self.entry = entry
+
+    @property
+    def stagger_delay(self) -> int:
+        return self.entry.options.get(CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY)
 
     def _resolve_lux_sensors(self, win: dict) -> list[str]:
         """Résout la liste des capteurs lux pour une fenêtre.

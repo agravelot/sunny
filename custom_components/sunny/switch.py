@@ -1,5 +1,6 @@
 """Plateforme switch pour l'intégration Sunny."""
 
+import asyncio
 import logging
 
 from homeassistant.components.switch import SwitchEntity
@@ -104,7 +105,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                     self._command_target = desired_position
                     self._command_threshold = threshold
                     self.hass.async_create_task(
-                        self._apply_position(cover_entity, desired_position)
+                        self._apply_staggered(cover_entity, desired_position)
                     )
 
         self.async_write_ha_state()
@@ -150,6 +151,12 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
             "Pilotage auto désactivé pour %s (intervention manuelle détectée)",
             self._window_name,
         )
+
+    async def _apply_staggered(self, cover_entity: str, position: int) -> None:
+        delay = self._window_idx * self.coordinator.stagger_delay
+        if delay > 0:
+            await asyncio.sleep(delay)
+        await self._apply_position(cover_entity, position)
 
     async def _apply_position(self, cover_entity: str, position: int) -> None:
         try:
@@ -205,7 +212,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 if self._should_apply(desired_position, threshold, cover_entity):
                     self._command_target = desired_position
                     self._command_threshold = threshold
-                    await self._apply_position(cover_entity, desired_position)
+                    await self._apply_staggered(cover_entity, desired_position)
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:

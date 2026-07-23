@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -160,6 +160,7 @@ def mock_coordinator(mock_hass):
     coord.entry = MagicMock()
     coord.entry.entry_id = "test_entry"
     coord.hass = mock_hass
+    coord.stagger_delay = 1
     coord.data = {
         "Test": {
             "desired_position": 50,
@@ -341,6 +342,65 @@ class TestSunnyAutoControlSwitch:
         await switch_instance.async_added_to_hass()
 
         assert switch_instance._attr_is_on is False
+
+    # --- Stagger tests ---
+
+    @pytest.mark.asyncio
+    async def test_apply_staggered_delay_skipped_when_zero(self, switch_instance, mock_coordinator, mock_hass):
+        switch_instance._window_idx = 0
+        mock_coordinator.stagger_delay = 0
+        mock_hass.services.async_call.reset_mock()
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            await switch_instance._apply_staggered("cover.test_shutter", 50)
+            mock_sleep.assert_not_called()
+        mock_hass.services.async_call.assert_called_once_with(
+            "cover", "set_cover_position",
+            {"entity_id": "cover.test_shutter", "position": 50},
+            blocking=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_apply_staggered_window_idx_0_no_delay(self, switch_instance, mock_coordinator, mock_hass):
+        switch_instance._window_idx = 0
+        mock_coordinator.stagger_delay = 3
+        mock_hass.services.async_call.reset_mock()
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            await switch_instance._apply_staggered("cover.test_shutter", 50)
+            mock_sleep.assert_not_called()
+        mock_hass.services.async_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_apply_staggered_window_idx_3_delay_3s(self, switch_instance, mock_coordinator, mock_hass):
+        switch_instance._window_idx = 3
+        mock_coordinator.stagger_delay = 1
+        mock_hass.services.async_call.reset_mock()
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            await switch_instance._apply_staggered("cover.test_shutter", 50)
+            mock_sleep.assert_awaited_once_with(3.0)
+        mock_hass.services.async_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_apply_staggered_custom_delay_and_idx(self, switch_instance, mock_coordinator, mock_hass):
+        switch_instance._window_idx = 2
+        mock_coordinator.stagger_delay = 5
+        mock_hass.services.async_call.reset_mock()
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            await switch_instance._apply_staggered("cover.test_shutter", 50)
+            mock_sleep.assert_awaited_once_with(10.0)
+        mock_hass.services.async_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_apply_staggered_delegates_to_apply_position(self, switch_instance, mock_coordinator, mock_hass):
+        """Vérifie que _apply_staggered appelle bien _apply_position avec les bons arguments."""
+        mock_coordinator.stagger_delay = 0
+        mock_hass.services.async_call.reset_mock()
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await switch_instance._apply_staggered("cover.test_shutter", 75)
+        mock_hass.services.async_call.assert_called_once_with(
+            "cover", "set_cover_position",
+            {"entity_id": "cover.test_shutter", "position": 75},
+            blocking=True,
+        )
 
 
 # ---------------------------------------------------------------------------
