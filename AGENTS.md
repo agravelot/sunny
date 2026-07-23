@@ -11,7 +11,7 @@ Home Assistant custom integration to automatically control blinds/shutters based
 ## Commands
 
 ```bash
-python3 -m pytest tests/ -v    # 88 unit tests (solar_math + strategies)
+python3 -m pytest tests/ -v    # 234 unit tests (solar_math + strategies + switch + number + button + services)
 ```
 
 GitHub CI also validates HACS (`hacs/action`) and hassfest (`home-assistant/actions/hassfest`). No lint, no typecheck, no build.
@@ -27,6 +27,8 @@ custom_components/sunny/
   manifest.json     # HA / HACS metadata
   sensor.py         # 4 sensors per window (sun, position, strategy, cloud)
   select.py         # 1 strategy selector per window
+  number.py         # 2 number entities per window (min_position, max_position)
+  button.py         # 1 button entity per window (reset_bounds)
   solar_math.py     # pure solar geometry calculations (no HA imports)
   strategies.py     # 7 control strategies (compute_position)
   strings.json      # UI translations
@@ -46,7 +48,7 @@ custom_components/sunny/
 - `entry_id` = HA ConfigEntry UUID
 - `window_id` = `cover_entity` (e.g. `cover.living_room_blind`) — stable, never a positional index
 - `window_name` = `win["name"]`
-- `suffix` = `sun`, `position`, `strategy`, `cloud`, `strategy_select`
+- `suffix` = `sun`, `position`, `strategy`, `cloud`, `strategy_select`, `min_position`, `max_position`, `reset_bounds`, `auto_control`
 
 **Never use a positional index in a unique_id.** If a window is removed, indices shift and remaining entities get desynchronized.
 
