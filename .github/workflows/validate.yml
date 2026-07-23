@@ -2,6 +2,7 @@ name: Validate
 
 on:
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: "0 0 * * *"
@@ -45,12 +46,13 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install ruff yamllint
-      - name: Ruff lint check
-        run: ruff check --output-format github
-        continue-on-error: true
-      - name: Ruff format check
-        run: ruff format --check
-        continue-on-error: true
-      - name: YAML lint
-        run: yamllint .github/ hacs.json
-        continue-on-error: true
+      - parallel:
+          - name: Ruff lint check
+            run: ruff check --output-format github
+            continue-on-error: true
+          - name: Ruff format check
+            run: ruff format --check
+            continue-on-error: true
+          - name: YAML lint
+            run: yamllint .github/ hacs.json
+            continue-on-error: true
