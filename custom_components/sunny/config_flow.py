@@ -57,6 +57,7 @@ from .const import (
     CONF_LUX_SENSORS,
     CONF_LUX_STEP,
     CONF_TARGET_ILLUMINATION,
+    CONF_STAGGER_DELAY,
     DEFAULT_NAME,
     DEFAULT_ORIENTATION,
     DEFAULT_WIDTH,
@@ -83,6 +84,7 @@ from .const import (
     DEFAULT_LUX_LOW,
     DEFAULT_LUX_STEP,
     DEFAULT_TARGET_ILLUMINATION,
+    DEFAULT_STAGGER_DELAY,
 )
 from .strategies import STRATEGY_OPTIONS
 
@@ -357,6 +359,8 @@ class SunnyOptionsFlow(OptionsFlow):
                 return await self.async_step_refresh()
             elif action == "position_threshold":
                 return await self.async_step_position_threshold()
+            elif action == "stagger":
+                return await self.async_step_stagger()
             elif action == "obstacles" and window_name is not None:
                 self._editing = int(window_name)
                 return await self.async_step_obstacles()
@@ -370,7 +374,7 @@ class SunnyOptionsFlow(OptionsFlow):
         options.append({"label": "+ Ajouter une fenêtre", "value": "add"})
 
         schema = vol.Schema({
-            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "refresh", "position_threshold", "obstacles", "done"]),
+            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "refresh", "position_threshold", "stagger", "obstacles", "done"]),
             vol.Optional("window"): vol.In({o["value"]: o["label"] for o in options}),
         })
 
@@ -487,6 +491,22 @@ class SunnyOptionsFlow(OptionsFlow):
             data_schema=vol.Schema({
                 vol.Required(CONF_REFRESH_INTERVAL, default=current):
                     vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+            }),
+        )
+
+    async def async_step_stagger(self, user_input: dict[str, Any] | None = None):
+        if user_input is not None:
+            self.data[CONF_STAGGER_DELAY] = user_input[CONF_STAGGER_DELAY]
+            return await self.async_step_init()
+
+        current = self.data.get(CONF_STAGGER_DELAY, DEFAULT_STAGGER_DELAY)
+        return self.async_show_form(
+            step_id="stagger",
+            data_schema=vol.Schema({
+                vol.Required(CONF_STAGGER_DELAY, default=current):
+                    NumberSelector(
+                        NumberSelectorConfig(min=0, max=30, step=1, mode=NumberSelectorMode.BOX)
+                    ),
             }),
         )
 

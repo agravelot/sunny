@@ -132,6 +132,13 @@
           "position_threshold": "Seuil minimum de changement (%)"
         }
       },
+      "stagger": {
+        "title": "Échelonnement des stores",
+        "description": "Délai entre le démarrage de chaque store pour éviter l'appel de courant.",
+        "data": {
+          "stagger_delay": "Délai entre chaque store (secondes)"
+        }
+      },
       "obstacles": {
         "title": "Obstacles de la fenêtre",
         "data": {
@@ -176,6 +183,7 @@
         "weather": "Changer l'entité météo",
         "refresh": "Modifier la fréquence de rafraîchissement",
         "position_threshold": "Changer le seuil de position",
+        "stagger": "Configurer l'échelonnement des stores",
         "obstacles": "Gérer les obstacles",
         "done": "Terminé"
       }
