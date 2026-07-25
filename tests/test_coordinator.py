@@ -1,6 +1,7 @@
-"""Tests unitaires pour _resolve_lux_sensors du coordinateur."""
+"""Tests unitaires pour _resolve_lux_sensors et _compute_lux_target_position du coordinateur."""
 
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -288,3 +289,115 @@ class TestResolveLuxSensors:
             with patch.object(coordinator_module.dr, "async_get", return_value=dev_reg):
                 result = coordinator_instance._resolve_lux_sensors({"lux_area_id": "salon"})
         assert result == ["sensor.z2m_lux"]
+
+
+# ---------------------------------------------------------------------------
+# Tests _compute_lux_target_position — stale detection
+# ---------------------------------------------------------------------------
+
+def _make_mock_state(state_value, last_changed, last_updated, attributes=None):
+    """Crée un mock State."""
+    st = MagicMock()
+    st.state = state_value
+    st.last_changed = last_changed
+    st.last_updated = last_updated
+    st.attributes = attributes or {}
+    return st
+
+
+class TestComputeLuxTargetStale:
+    """Tests pour la détection stale dans _compute_lux_target_position."""
+
+    NOW = datetime(2026, 7, 25, 18, 40, 0, tzinfo=timezone.utc)
+
+    def test_sensor_used_when_cover_moved_over_60s_ago(self, coordinator_instance, mock_hass):
+        cover_last_changed = self.NOW - timedelta(seconds=120)
+        sensor_last_updated = self.NOW - timedelta(hours=4)
+
+        cover_state = _make_mock_state("open", cover_last_changed, cover_last_changed, {"current_position": 31})
+        sensor_state = _make_mock_state("0", sensor_last_updated, sensor_last_updated, {"device_class": "illuminance"})
+
+        mock_hass.states.get.side_effect = lambda eid: {
+            "cover.test": cover_state,
+            "sensor.lux_salon": sensor_state,
+        }.get(eid)
+
+        win = {
+            "cover_entity": "cover.test",
+            "lux_sensors": ["sensor.lux_salon"],
+            "lux_high": 5000,
+            "lux_low": 3000,
+            "lux_step": 10,
+        }
+
+        strategy = MagicMock()
+        strategy.compute_position.return_value = 41
+
+        with patch("sunny.coordinator.datetime") as mock_dt:
+            mock_dt.now.return_value = self.NOW
+            mock_dt.timezone = timezone
+            mock_dt.timedelta = timedelta
+            result = coordinator_instance._compute_lux_target_position(win, strategy)
+        assert result == 41  # lux=0 < 3000 → ouvert: 31 + 10 = 41
+
+    def test_sensor_stale_when_cover_moved_under_60s_ago(self, coordinator_instance, mock_hass):
+        cover_last_changed = self.NOW - timedelta(seconds=30)
+        sensor_last_updated = self.NOW - timedelta(hours=4)
+
+        cover_state = _make_mock_state("open", cover_last_changed, cover_last_changed, {"current_position": 31})
+        sensor_state = _make_mock_state("0", sensor_last_updated, sensor_last_updated, {"device_class": "illuminance"})
+
+        mock_hass.states.get.side_effect = lambda eid: {
+            "cover.test": cover_state,
+            "sensor.lux_salon": sensor_state,
+        }.get(eid)
+
+        win = {
+            "cover_entity": "cover.test",
+            "lux_sensors": ["sensor.lux_salon"],
+            "lux_high": 5000,
+            "lux_low": 3000,
+            "lux_step": 10,
+        }
+
+        strategy = MagicMock()
+        strategy.compute_position.return_value = 41
+
+        with patch("sunny.coordinator.datetime") as mock_dt:
+            mock_dt.now.return_value = self.NOW
+            mock_dt.timezone = timezone
+            mock_dt.timedelta = timedelta
+            result = coordinator_instance._compute_lux_target_position(win, strategy)
+
+        assert result == 31  # stale → position inchangée
+
+    def test_sensor_stale_at_exactly_60s_boundary(self, coordinator_instance, mock_hass):
+        cover_last_changed = self.NOW - timedelta(seconds=60)
+        sensor_last_updated = self.NOW - timedelta(hours=4)
+
+        cover_state = _make_mock_state("open", cover_last_changed, cover_last_changed, {"current_position": 31})
+        sensor_state = _make_mock_state("0", sensor_last_updated, sensor_last_updated, {"device_class": "illuminance"})
+
+        mock_hass.states.get.side_effect = lambda eid: {
+            "cover.test": cover_state,
+            "sensor.lux_salon": sensor_state,
+        }.get(eid)
+
+        win = {
+            "cover_entity": "cover.test",
+            "lux_sensors": ["sensor.lux_salon"],
+            "lux_high": 5000,
+            "lux_low": 3000,
+            "lux_step": 10,
+        }
+
+        strategy = MagicMock()
+        strategy.compute_position.return_value = 41
+
+        with patch("sunny.coordinator.datetime") as mock_dt:
+            mock_dt.now.return_value = self.NOW
+            mock_dt.timezone = timezone
+            mock_dt.timedelta = timedelta
+            result = coordinator_instance._compute_lux_target_position(win, strategy)
+
+        assert result == 41  # 60s exact → pas stale → ouvert: 31 + 10 = 41

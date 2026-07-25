@@ -127,12 +127,12 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 continue
             if cover_last_changed is not None:
                 now = datetime.now(timezone.utc)
-                if (now - cover_last_changed) < timedelta(seconds=60) and sensor_state.last_updated <= cover_last_changed:
+                grace = int((now - cover_last_changed).total_seconds())
+                if grace < 60:
                     stale_count += 1
                     _LOGGER.debug(
-                        "Capteur lux '%s' stale (last_updated=%s <= cover.last_changed=%s, grace=%ds)",
-                        sid, sensor_state.last_updated, cover_last_changed,
-                        int((now - cover_last_changed).total_seconds()),
+                        "Capteur lux '%s' stale (couverture en pause %ds/60s après mouvement du volet)",
+                        sid, grace,
                     )
                     continue
             try:
