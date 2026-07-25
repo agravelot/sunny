@@ -1,6 +1,6 @@
 """Coordinateur de données pour l'intégration Sunny."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 from homeassistant.core import HomeAssistant
@@ -125,13 +125,16 @@ class SunnyCoordinator(DataUpdateCoordinator):
             if sensor_state is None:
                 _LOGGER.debug("Capteur lux '%s' introuvable", sid)
                 continue
-            if cover_last_changed is not None and sensor_state.last_updated <= cover_last_changed:
-                stale_count += 1
-                _LOGGER.debug(
-                    "Capteur lux '%s' stale (last_updated=%s <= cover.last_changed=%s)",
-                    sid, sensor_state.last_updated, cover_last_changed,
-                )
-                continue
+            if cover_last_changed is not None:
+                now = datetime.now(timezone.utc)
+                if (now - cover_last_changed) < timedelta(seconds=60) and sensor_state.last_updated <= cover_last_changed:
+                    stale_count += 1
+                    _LOGGER.debug(
+                        "Capteur lux '%s' stale (last_updated=%s <= cover.last_changed=%s, grace=%ds)",
+                        sid, sensor_state.last_updated, cover_last_changed,
+                        int((now - cover_last_changed).total_seconds()),
+                    )
+                    continue
             try:
                 val = float(sensor_state.state)
                 fresh_values.append(val)
