@@ -70,7 +70,7 @@ import sunny.coordinator as coordinator_module
 # Fixtures
 # ---------------------------------------------------------------------------
 
-def _make_mock_entity(entity_id, domain, area_id, device_class, original_device_class, disabled):
+def _make_mock_entity(entity_id, domain, area_id, device_class, original_device_class, disabled, device_id=None):
     """Crée un mock EntityEntry."""
     entity = MagicMock()
     entity.entity_id = entity_id
@@ -79,6 +79,7 @@ def _make_mock_entity(entity_id, domain, area_id, device_class, original_device_
     entity.device_class = device_class
     entity.original_device_class = original_device_class
     entity.disabled = disabled
+    entity.device_id = device_id
     return entity
 
 
@@ -230,3 +231,60 @@ class TestResolveLuxSensors:
         with patch.object(coordinator_module.er, "async_get", return_value=ent_reg):
             result = coordinator_instance._resolve_lux_sensors({"lux_area_id": "salon"})
         assert sorted(result) == sorted(["sensor.salon_lux_1", "sensor.salon_lux_2"])
+
+    def test_finds_sensor_via_device_area(self, coordinator_instance, mock_hass):
+        entity = _make_mock_entity(
+            "sensor.z2m_lux", "sensor", None,
+            device_class=None, original_device_class="illuminance", disabled=False,
+            device_id="dev_abcd1234",
+        )
+        ent_reg = _mock_entity_registry([entity])
+
+        device = MagicMock()
+        device.area_id = "salon"
+
+        dev_reg = MagicMock()
+        dev_reg.async_get.return_value = device
+
+        with patch.object(coordinator_module.er, "async_get", return_value=ent_reg):
+            with patch.object(coordinator_module.dr, "async_get", return_value=dev_reg):
+                result = coordinator_instance._resolve_lux_sensors({"lux_area_id": "salon"})
+        assert result == ["sensor.z2m_lux"]
+
+    def test_entity_with_neither_area_nor_device_area(self, coordinator_instance, mock_hass):
+        entity = _make_mock_entity(
+            "sensor.z2m_lux", "sensor", None,
+            device_class=None, original_device_class="illuminance", disabled=False,
+            device_id="dev_abcd1234",
+        )
+        ent_reg = _mock_entity_registry([entity])
+
+        device = MagicMock()
+        device.area_id = None
+
+        dev_reg = MagicMock()
+        dev_reg.async_get.return_value = device
+
+        with patch.object(coordinator_module.er, "async_get", return_value=ent_reg):
+            with patch.object(coordinator_module.dr, "async_get", return_value=dev_reg):
+                result = coordinator_instance._resolve_lux_sensors({"lux_area_id": "salon"})
+        assert result == []
+
+    def test_entity_area_takes_priority_over_device_area(self, coordinator_instance, mock_hass):
+        entity = _make_mock_entity(
+            "sensor.z2m_lux", "sensor", "salon",
+            device_class=None, original_device_class="illuminance", disabled=False,
+            device_id="dev_abcd1234",
+        )
+        ent_reg = _mock_entity_registry([entity])
+
+        device = MagicMock()
+        device.area_id = "bureau"
+
+        dev_reg = MagicMock()
+        dev_reg.async_get.return_value = device
+
+        with patch.object(coordinator_module.er, "async_get", return_value=ent_reg):
+            with patch.object(coordinator_module.dr, "async_get", return_value=dev_reg):
+                result = coordinator_instance._resolve_lux_sensors({"lux_area_id": "salon"})
+        assert result == ["sensor.z2m_lux"]

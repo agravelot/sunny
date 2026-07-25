@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr
 
 from .const import (
     DOMAIN,
@@ -71,14 +72,21 @@ class SunnyCoordinator(DataUpdateCoordinator):
             return []
 
         ent_reg = er.async_get(self.hass)
+        dev_reg = dr.async_get(self.hass)
         sensors = []
         for entity in ent_reg.entities.values():
-            if (
-                entity.domain == "sensor"
-                and entity.area_id == area_id
-                and (entity.device_class or entity.original_device_class) == "illuminance"
-                and not entity.disabled
-            ):
+            if entity.domain != "sensor":
+                continue
+            if entity.disabled:
+                continue
+            if (entity.device_class or entity.original_device_class) != "illuminance":
+                continue
+            entity_area = entity.area_id
+            if not entity_area and entity.device_id:
+                device = dev_reg.async_get(entity.device_id)
+                if device:
+                    entity_area = device.area_id
+            if entity_area == area_id:
                 sensors.append(entity.entity_id)
         return sensors
 
