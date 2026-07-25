@@ -76,7 +76,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
             if (
                 entity.domain == "sensor"
                 and entity.area_id == area_id
-                and entity.device_class == "illuminance"
+                and (entity.device_class or entity.original_device_class) == "illuminance"
                 and not entity.disabled
             ):
                 sensors.append(entity.entity_id)
