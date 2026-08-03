@@ -1,6 +1,7 @@
 """Tests unitaires pour le switch de pilotage automatique."""
 
 import sys
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -305,6 +306,51 @@ class TestSunnyAutoControlSwitch:
         switch_instance._handle_coordinator_update()
         mock_hass.async_create_task.assert_not_called()
 
+    def test_pending_command_blocks_reapply(self, switch_instance, mock_hass):
+        """Une commande en cours (non expirée) empêche un nouvel envoi."""
+        switch_instance._attr_is_on = True
+        switch_instance._command_target = 50
+        switch_instance._command_threshold = 3
+        switch_instance._command_expires_at = time.monotonic() + 60
+        switch_instance.async_write_ha_state = MagicMock()
+        mock_hass.async_create_task.reset_mock()
+
+        switch_instance._handle_coordinator_update()
+
+        mock_hass.async_create_task.assert_not_called()
+        switch_instance.async_write_ha_state.assert_called_once()
+
+    def test_expired_command_overridden_disables(self, switch_instance, mock_hass):
+        """Commande expirée + volet loin de la cible → intervention manuelle → off."""
+        switch_instance._attr_is_on = True
+        switch_instance._command_target = 50
+        switch_instance._command_expires_at = time.monotonic() - 1
+        switch_instance.async_write_ha_state = MagicMock()
+        mock_hass.async_create_task.reset_mock()
+        switch_instance.hass.states.get.return_value = _mock_state("80")
+
+        switch_instance._handle_coordinator_update()
+
+        assert switch_instance._attr_is_on is False
+        mock_hass.async_create_task.assert_not_called()
+        switch_instance.async_write_ha_state.assert_called_once()
+
+    def test_expired_command_at_desired_no_reapply(self, switch_instance, mock_hass):
+        """Commande expirée mais le volet est à la cible → aucune ré-application."""
+        switch_instance._attr_is_on = True
+        switch_instance._command_target = 50
+        switch_instance._command_expires_at = time.monotonic() - 1
+        switch_instance.async_write_ha_state = MagicMock()
+        mock_hass.async_create_task.reset_mock()
+        switch_instance.hass.states.get.return_value = _mock_state("50")
+
+        switch_instance._handle_coordinator_update()
+
+        assert switch_instance._attr_is_on is True
+        assert switch_instance._command_target is None
+        mock_hass.async_create_task.assert_not_called()
+        switch_instance.async_write_ha_state.assert_called_once()
+
     @pytest.mark.asyncio
     async def test_apply_position_error_is_logged(self, switch_instance, mock_hass):
         mock_hass.services.async_call.side_effect = RuntimeError("cover indisponible")
@@ -598,8 +644,8 @@ class TestOnCoverStateChange:
         assert s._command_target is None
         s.async_write_ha_state.assert_not_called()
 
-    def test_command_target_state_changed_far_from_target_still_suppressed(self, mock_hass):
-        """Changement d'état mais position loin de la cible → supprimé."""
+    def test_command_target_state_changed_far_from_target_disables(self, mock_hass):
+        """Changement d'état + position qui s'éloigne de la cible → intervention manuelle."""
         s = self._make_switch(mock_hass, desired_position=0)
         s._attr_is_on = True
         s._command_target = 0
@@ -610,9 +656,9 @@ class TestOnCoverStateChange:
             old_state_value="closed", old_current_position=0,
         ))
 
-        assert s._attr_is_on is True
-        assert s._command_target == 0
-        s.async_write_ha_state.assert_not_called()
+        assert s._attr_is_on is False
+        assert s._command_target is None
+        s.async_write_ha_state.assert_called_once()
 
     def test_command_target_suppresses_without_old_state(self, mock_hass):
         """Quand old_state est absent, la détection de position fonctionne."""
@@ -942,6 +988,192 @@ class TestOnCoverStateChange:
 
         assert s._attr_is_on is False
         s.async_write_ha_state.assert_called_once()
+
+    # --- intervention manuelle : éloignement / expiration / arrêt ---
+
+    def test_divergence_during_transit_disables(self, mock_hass):
+        """Le cover s'éloigne de la cible auto → intervention manuelle → auto off."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "open", current_position=80,
+            old_state_value="open", old_current_position=30,
+        ))
+
+        assert s._attr_is_on is False
+        assert s._command_target is None
+        s.async_write_ha_state.assert_called_once()
+
+    def test_converging_transit_stays_suppressed(self, mock_hass):
+        """Position qui se rapproche de la cible auto → toujours supprimé."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "open", current_position=20,
+            old_state_value="open", old_current_position=60,
+        ))
+
+        assert s._attr_is_on is True
+        assert s._command_target == 0
+        s.async_write_ha_state.assert_not_called()
+
+    def test_expired_command_disables(self, mock_hass):
+        """Commande auto expirée sans atteinte de la cible → intervention manuelle."""
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._command_target = 50
+        s._command_threshold = 3
+        s._command_expires_at = 1.0
+
+        with patch("sunny.switch.time.monotonic", return_value=2.0):
+            s._on_cover_state_change(self._event(
+                "60", old_state_value="70",
+            ))
+
+        assert s._attr_is_on is False
+        assert s._command_target is None
+        s.async_write_ha_state.assert_called_once()
+
+    def test_expired_command_at_desired_stays_on(self, mock_hass):
+        """Commande expirée mais le cover a atteint la cible → pas de désactivation."""
+        s = self._make_switch(mock_hass, desired_position=50)
+        s._attr_is_on = True
+        s._command_target = 50
+        s._command_threshold = 3
+        s._command_expires_at = 1.0
+
+        with patch("sunny.switch.time.monotonic", return_value=2.0):
+            s._on_cover_state_change(self._event(
+                "50", old_state_value="60",
+            ))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_settle_at_wrong_position_disables(self, mock_hass):
+        """Arrêt (moving→open) sur une position loin de la cible → manuel → off."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "open", current_position=60,
+            old_state_value="moving", old_current_position=70,
+        ))
+
+        assert s._attr_is_on is False
+        assert s._command_target is None
+        s.async_write_ha_state.assert_called_once()
+
+    def test_settle_at_desired_stays_on(self, mock_hass):
+        """Arrêt (moving→closed) sur la position désirée → pilotage auto maintenu."""
+        s = self._make_switch(mock_hass, desired_position=0)
+        s._attr_is_on = True
+        s._command_target = 0
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "closed", current_position=0,
+            old_state_value="moving", old_current_position=5,
+        ))
+
+        assert s._attr_is_on is True
+        assert s._command_target is None
+        s.async_write_ha_state.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests CommandWasOverridden
+# ---------------------------------------------------------------------------
+
+class TestCommandWasOverridden:
+    """Tests unitaires pour _command_was_overridden."""
+
+    def _make_switch(self, mock_hass):
+        coord = MagicMock()
+        coord.entry = MagicMock()
+        coord.entry.options = {}
+        coord.entry.entry_id = "test_entry"
+        s = switch_module.SunnyAutoControlSwitch(
+            coord, "Test", 0, "test_id", "cover.test_shutter", MagicMock(),
+        )
+        s.hass = mock_hass
+        return s
+
+    def test_cover_at_desired_not_overridden(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("50")
+        assert s._command_was_overridden(50, 3, "cover.x") is False
+
+    def test_cover_far_from_desired_overridden(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("80")
+        assert s._command_was_overridden(50, 3, "cover.x") is True
+
+    def test_cover_within_threshold_not_overridden(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("52")
+        assert s._command_was_overridden(50, 3, "cover.x") is False
+
+    def test_unavailable_not_overridden(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = _mock_state("unavailable")
+        assert s._command_was_overridden(50, 3, "cover.x") is False
+
+    def test_no_state_not_overridden(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        s.hass.states.get.return_value = None
+        assert s._command_was_overridden(50, 3, "cover.x") is False
+
+
+# ---------------------------------------------------------------------------
+# Tests SettleTransition
+# ---------------------------------------------------------------------------
+
+class TestSettleTransition:
+    """Tests unitaires pour _is_settle_transition."""
+
+    def test_moving_to_open_true(self):
+        assert switch_module.SunnyAutoControlSwitch._is_settle_transition(
+            _mock_state("moving"), _mock_state("open")
+        ) is True
+
+    def test_opening_to_open_true(self):
+        assert switch_module.SunnyAutoControlSwitch._is_settle_transition(
+            _mock_state("opening"), _mock_state("open")
+        ) is True
+
+    def test_closing_to_closed_true(self):
+        assert switch_module.SunnyAutoControlSwitch._is_settle_transition(
+            _mock_state("closing"), _mock_state("closed")
+        ) is True
+
+    def test_open_to_closed_false(self):
+        assert switch_module.SunnyAutoControlSwitch._is_settle_transition(
+            _mock_state("open"), _mock_state("closed")
+        ) is False
+
+    def test_open_to_open_false(self):
+        assert switch_module.SunnyAutoControlSwitch._is_settle_transition(
+            _mock_state("open"), _mock_state("open")
+        ) is False
+
+    def test_none_state_false(self):
+        assert switch_module.SunnyAutoControlSwitch._is_settle_transition(
+            None, _mock_state("open")
+        ) is False
+
+    def test_numeric_states_false(self):
+        assert switch_module.SunnyAutoControlSwitch._is_settle_transition(
+            _mock_state("70"), _mock_state("60")
+        ) is False
 
 
 # ---------------------------------------------------------------------------
