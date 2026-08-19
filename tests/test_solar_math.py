@@ -345,6 +345,22 @@ class TestObstacles:
         assert result_ui["lit_pct"] == result_canonical["lit_pct"]
         assert 0 < result_ui["lit_pct"] < 100
 
+    def test_zero_thickness_wing_blocks(self):
+        """Une aile d'épaisseur nulle (x1 == x2) doit quand même bloquer le soleil."""
+        no_obs = solar_math.compute_window(
+            h=24.6, As=97.01, An=165, W=1.4, Hw=1.9, e=0.26,
+            obstacles=[],
+        )
+        result = solar_math.compute_window(
+            h=24.6, As=97.01, An=165, W=1.4, Hw=1.9, e=0.26,
+            obstacles=[{
+                "x1": -8.34, "y1": 0, "z1": 0,
+                "x2": -8.34, "y2": 8.72, "z2": 8,
+            }],
+        )
+        assert result["lit_pct"] < no_obs["lit_pct"]
+        assert result["lit_pct"] == 0.0
+
     def test_multiple_obstacles_combined(self):
         """Mur frontal + aile latérale : ombres cumulées."""
         result = solar_math.compute_window(

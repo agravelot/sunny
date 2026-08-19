@@ -68,7 +68,9 @@ def _ray_box_intersect(
     elif pz < zmin or pz > zmax:
         return False
 
-    return t_near < t_far and t_near > 0.0  # t_near > 0 exclut les obstacles attachés à la façade (ailes)
+    # <= et non < : une boîte d'épaisseur nulle (x1==x2, ex. mur en retour)
+    # donne t_near == t_far ; l'inégalité stricte l'ignorait silencieusement.
+    return t_near <= t_far and t_near > 0.0  # t_near > 0 exclut les obstacles attachés à la façade (ailes)
 
 
 def _normalize_obstacle(obs: dict) -> dict:
