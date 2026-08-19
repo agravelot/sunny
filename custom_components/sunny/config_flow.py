@@ -181,17 +181,17 @@ def _build_obstacle_schema(defaults: dict[str, Any] | None = None) -> vol.Schema
     if defaults is None:
         defaults = {}
     return vol.Schema({
-        vol.Required(CONF_OBSTACLE_X1, default=defaults.get(CONF_OBSTACLE_X1, DEFAULT_OBSTACLE_X1)):
+        vol.Required(CONF_OBSTACLE_X1, default=defaults.get("x1", DEFAULT_OBSTACLE_X1)):
             vol.All(vol.Coerce(float)),
-        vol.Required(CONF_OBSTACLE_Y1, default=defaults.get(CONF_OBSTACLE_Y1, DEFAULT_OBSTACLE_Y1)):
+        vol.Required(CONF_OBSTACLE_Y1, default=defaults.get("y1", DEFAULT_OBSTACLE_Y1)):
             vol.All(vol.Coerce(float)),
-        vol.Required(CONF_OBSTACLE_Z1, default=defaults.get(CONF_OBSTACLE_Z1, DEFAULT_OBSTACLE_Z1)):
+        vol.Required(CONF_OBSTACLE_Z1, default=defaults.get("z1", DEFAULT_OBSTACLE_Z1)):
             vol.All(vol.Coerce(float)),
-        vol.Required(CONF_OBSTACLE_X2, default=defaults.get(CONF_OBSTACLE_X2, DEFAULT_OBSTACLE_X2)):
+        vol.Required(CONF_OBSTACLE_X2, default=defaults.get("x2", DEFAULT_OBSTACLE_X2)):
             vol.All(vol.Coerce(float)),
-        vol.Required(CONF_OBSTACLE_Y2, default=defaults.get(CONF_OBSTACLE_Y2, DEFAULT_OBSTACLE_Y2)):
+        vol.Required(CONF_OBSTACLE_Y2, default=defaults.get("y2", DEFAULT_OBSTACLE_Y2)):
             vol.All(vol.Coerce(float)),
-        vol.Required(CONF_OBSTACLE_Z2, default=defaults.get(CONF_OBSTACLE_Z2, DEFAULT_OBSTACLE_Z2)):
+        vol.Required(CONF_OBSTACLE_Z2, default=defaults.get("z2", DEFAULT_OBSTACLE_Z2)):
             vol.All(vol.Coerce(float)),
     })
 
@@ -545,7 +545,7 @@ class SunnyOptionsFlow(OptionsFlow):
 
         options = []
         for i, obs in enumerate(obstacles):
-            label = f"Obstacle {i+1} : ({obs.get(CONF_OBSTACLE_X1,0)},{obs.get(CONF_OBSTACLE_Y1,0)},{obs.get(CONF_OBSTACLE_Z1,0)})→({obs.get(CONF_OBSTACLE_X2,0)},{obs.get(CONF_OBSTACLE_Y2,0)},{obs.get(CONF_OBSTACLE_Z2,0)})"
+            label = f"Obstacle {i+1} : ({obs.get('x1',0)},{obs.get('y1',0)},{obs.get('z1',0)})→({obs.get('x2',0)},{obs.get('y2',0)},{obs.get('z2',0)})"
             options.extend([
                 {"label": f"✏️ {label}", "value": f"edit_{i}"},
                 {"label": f"🗑️ Supprimer", "value": f"delete_{i}"},
@@ -567,12 +567,12 @@ class SunnyOptionsFlow(OptionsFlow):
                 win = dict(windows[self._editing])
                 obstacles = list(win.get(CONF_OBSTACLES, []))
                 obstacles.append({
-                    CONF_OBSTACLE_X1: user_input[CONF_OBSTACLE_X1],
-                    CONF_OBSTACLE_Y1: user_input[CONF_OBSTACLE_Y1],
-                    CONF_OBSTACLE_Z1: user_input[CONF_OBSTACLE_Z1],
-                    CONF_OBSTACLE_X2: user_input[CONF_OBSTACLE_X2],
-                    CONF_OBSTACLE_Y2: user_input[CONF_OBSTACLE_Y2],
-                    CONF_OBSTACLE_Z2: user_input[CONF_OBSTACLE_Z2],
+                    "x1": user_input[CONF_OBSTACLE_X1],
+                    "y1": user_input[CONF_OBSTACLE_Y1],
+                    "z1": user_input[CONF_OBSTACLE_Z1],
+                    "x2": user_input[CONF_OBSTACLE_X2],
+                    "y2": user_input[CONF_OBSTACLE_Y2],
+                    "z2": user_input[CONF_OBSTACLE_Z2],
                 })
                 win[CONF_OBSTACLES] = obstacles
                 windows[self._editing] = win
@@ -594,12 +594,12 @@ class SunnyOptionsFlow(OptionsFlow):
                 idx = getattr(self, "_obstacle_editing", -1)
                 if 0 <= idx < len(obstacles):
                     obstacles[idx] = {
-                        CONF_OBSTACLE_X1: user_input[CONF_OBSTACLE_X1],
-                        CONF_OBSTACLE_Y1: user_input[CONF_OBSTACLE_Y1],
-                        CONF_OBSTACLE_Z1: user_input[CONF_OBSTACLE_Z1],
-                        CONF_OBSTACLE_X2: user_input[CONF_OBSTACLE_X2],
-                        CONF_OBSTACLE_Y2: user_input[CONF_OBSTACLE_Y2],
-                        CONF_OBSTACLE_Z2: user_input[CONF_OBSTACLE_Z2],
+                        "x1": user_input[CONF_OBSTACLE_X1],
+                        "y1": user_input[CONF_OBSTACLE_Y1],
+                        "z1": user_input[CONF_OBSTACLE_Z1],
+                        "x2": user_input[CONF_OBSTACLE_X2],
+                        "y2": user_input[CONF_OBSTACLE_Y2],
+                        "z2": user_input[CONF_OBSTACLE_Z2],
                     }
                     win[CONF_OBSTACLES] = obstacles
                     windows[self._editing] = win

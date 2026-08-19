@@ -75,6 +75,40 @@ def _migrate_screen_to_obstacles(entry: ConfigEntry) -> dict | None:
     return new_options
 
 
+_OBSTACLE_KEY_MAP = {"ox1": "x1", "oy1": "y1", "oz1": "z1", "ox2": "x2", "oy2": "y2", "oz2": "z2"}
+
+
+def _migrate_obstacle_keys(entry: ConfigEntry) -> dict | None:
+    """Convertit les clés d'obstacles ox1… → x1… (format canonique du moteur).
+
+    Retourne les nouvelles options si une migration a eu lieu, None sinon.
+    """
+    windows = list(entry.options.get("windows", []))
+    migrated = False
+
+    for idx, win in enumerate(windows):
+        obstacles = win.get("obstacles")
+        if not obstacles:
+            continue
+        win = dict(win)
+        new_obstacles = []
+        for obs in obstacles:
+            if "ox1" in obs and "x1" not in obs:
+                new_obstacles.append({_OBSTACLE_KEY_MAP.get(k, k): v for k, v in obs.items()})
+                migrated = True
+            else:
+                new_obstacles.append(obs)
+        win["obstacles"] = new_obstacles
+        windows[idx] = win
+
+    if not migrated:
+        return None
+
+    new_options = dict(entry.options)
+    new_options["windows"] = windows
+    return new_options
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     new_options = _migrate_window_ids(entry)
     if new_options is not None:
@@ -84,6 +118,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     new_options = _migrate_screen_to_obstacles(entry)
     if new_options is not None:
         _LOGGER.info("Migration screen_distance → obstacles effectuée")
+        hass.config_entries.async_update_entry(entry, options=new_options)
+
+    new_options = _migrate_obstacle_keys(entry)
+    if new_options is not None:
+        _LOGGER.info("Migration des clés d'obstacles effectuée")
         hass.config_entries.async_update_entry(entry, options=new_options)
 
     coordinator = SunnyCoordinator(hass, entry)

@@ -330,6 +330,21 @@ class TestObstacles:
         assert result["behind"] is False
         assert 0 < result["lit_pct"] < 100
 
+    def test_obstacle_ui_format_keys(self):
+        """Un obstacle saisi via l'UI (ox1…) ne doit pas planter et donner le même résultat que le format canonique."""
+        ui = {"ox1": -10, "oy1": 0, "oz1": 0, "ox2": 0.5, "oy2": 3, "oz2": 6}
+        canonical = {"x1": -10, "y1": 0, "z1": 0, "x2": 0.5, "y2": 3, "z2": 6}
+        result_ui = solar_math.compute_window(
+            h=45, As=150, An=180, W=2, Hw=1.5, e=0,
+            obstacles=[ui],
+        )
+        result_canonical = solar_math.compute_window(
+            h=45, As=150, An=180, W=2, Hw=1.5, e=0,
+            obstacles=[canonical],
+        )
+        assert result_ui["lit_pct"] == result_canonical["lit_pct"]
+        assert 0 < result_ui["lit_pct"] < 100
+
     def test_multiple_obstacles_combined(self):
         """Mur frontal + aile latérale : ombres cumulées."""
         result = solar_math.compute_window(

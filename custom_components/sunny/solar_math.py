@@ -71,6 +71,14 @@ def _ray_box_intersect(
     return t_near < t_far and t_near > 0.0  # t_near > 0 exclut les obstacles attachés à la façade (ailes)
 
 
+def _normalize_obstacle(obs: dict) -> dict:
+    """Normalise les clés d'un obstacle (format UI ox1… → x1…)."""
+    if "x1" in obs:
+        return obs
+    mapping = {"x1": "ox1", "y1": "oy1", "z1": "oz1", "x2": "ox2", "y2": "oy2", "z2": "oz2"}
+    return {k: obs.get(src, 0.0) for k, src in mapping.items()}
+
+
 def compute_window(
     h: float,
     As: float,
@@ -89,6 +97,7 @@ def compute_window(
 
     if obstacles is None:
         obstacles = []
+    obstacles = [_normalize_obstacle(o) for o in obstacles]
 
     result = {
         "solar_altitude": h,
