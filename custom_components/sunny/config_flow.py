@@ -400,7 +400,11 @@ class SunnyOptionsFlow(OptionsFlow):
                     errors=errors,
                 )
 
-            self.data[CONF_WINDOWS][self._editing] = dict(user_input)
+            # Fusionne avec l'existant : le formulaire n'expose pas 'obstacles'
+            # ni 'id' — un remplacement intégral les effacerait définitivement.
+            current = dict(self.data[CONF_WINDOWS][self._editing])
+            current.update(user_input)
+            self.data[CONF_WINDOWS][self._editing] = current
             self._editing = None
             return await self.async_step_init()
 
