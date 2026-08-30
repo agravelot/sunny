@@ -506,7 +506,8 @@ class TestRegistry:
         assert "always_closed" in strategies.STRATEGIES
         assert "always_open" in strategies.STRATEGIES
         assert "lux_target" in strategies.STRATEGIES
-        assert len(strategies.STRATEGIES) == 10
+        assert "lux_target_glare" in strategies.STRATEGIES
+        assert len(strategies.STRATEGIES) == 11
 
     def test_strategy_options(self):
         assert "block_all" in strategies.STRATEGY_OPTIONS
@@ -564,3 +565,71 @@ class TestReliefAngleBehind:
     def test_always_open_ignores_behind(self):
         s = strategies.AlwaysOpenStrategy()
         assert s.compute_position(self._behind_from_relief()) == 100
+
+
+# -----------------------------------------------------------------------
+# LuxTargetGlareStrategy
+# -----------------------------------------------------------------------
+
+class TestLuxTargetGlareStrategy:
+    """Tests pour la stratégie lux_target_glare (anti-éblouissement)."""
+
+    def _data(self, **kw) -> dict:
+        data = {
+            "lux_value": 4000.0,
+            "current_position": 50,
+            "lux_high": 5000,
+            "lux_low": 3000,
+            "lux_step": 10,
+            "can_open": True,
+            "can_close": True,
+        }
+        data.update(kw)
+        return data
+
+    def test_registered(self):
+        assert "lux_target_glare" in strategies.STRATEGIES
+        assert (
+            strategies.STRATEGIES["lux_target_glare"].label
+            == "Cible lux anti-éblouissement (priorité sans soleil direct)"
+        )
+
+    def test_lux_none_unchanged(self):
+        s = strategies.STRATEGIES["lux_target_glare"]
+        assert s.compute_position(self._data(lux_value=None)) == 50
+
+    def test_deadzone_unchanged(self):
+        s = strategies.STRATEGIES["lux_target_glare"]
+        assert s.compute_position(self._data(lux_value=4000)) == 50
+
+    def test_above_high_closes_when_allowed(self):
+        s = strategies.STRATEGIES["lux_target_glare"]
+        assert s.compute_position(self._data(lux_value=6000)) == 40
+
+    def test_above_high_blocked(self):
+        s = strategies.STRATEGIES["lux_target_glare"]
+        assert s.compute_position(self._data(lux_value=6000, can_close=False)) == 50
+
+    def test_below_low_opens_when_allowed(self):
+        s = strategies.STRATEGIES["lux_target_glare"]
+        assert s.compute_position(self._data(lux_value=1000)) == 60
+
+    def test_below_low_blocked(self):
+        s = strategies.STRATEGIES["lux_target_glare"]
+        assert s.compute_position(self._data(lux_value=1000, can_open=False)) == 50
+
+    def test_open_clamped_at_100(self):
+        s = strategies.STRATEGIES["lux_target_glare"]
+        assert s.compute_position(self._data(lux_value=1000, current_position=95)) == 100
+
+    def test_close_clamped_at_0(self):
+        s = strategies.STRATEGIES["lux_target_glare"]
+        assert s.compute_position(self._data(lux_value=6000, current_position=5)) == 0
+
+    def test_flags_default_true(self):
+        """Sans flags (usage autonome), se comporte comme lux_target."""
+        s = strategies.STRATEGIES["lux_target_glare"]
+        data = self._data(lux_value=1000)
+        del data["can_open"]
+        del data["can_close"]
+        assert s.compute_position(data) == 60

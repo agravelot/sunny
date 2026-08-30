@@ -331,6 +331,37 @@ class LuxTargetStrategy(BaseStrategy):
         return cur
 
 
+class LuxTargetGlareStrategy(BaseStrategy):
+    """Régulation lux anti-éblouissement — priorité aux fenêtres sans soleil direct.
+
+    Les flags can_open / can_close sont calculés par le coordinator pour le
+    groupe de fenêtres partageant un capteur lux :
+    - ouverture : les fenêtres sans soleil direct d'abord
+    - fermeture : les fenêtres ensoleillées d'abord
+    """
+
+    name = "lux_target_glare"
+    label = "Cible lux anti-éblouissement (priorité sans soleil direct)"
+
+    def compute_position(self, data: dict) -> int:
+        lux = data.get("lux_value")
+        cur = data.get("current_position", 100)
+        high = data.get("lux_high", 5000)
+        low = data.get("lux_low", 3000)
+        step = data.get("lux_step", 10)
+        can_open = data.get("can_open", True)
+        can_close = data.get("can_close", True)
+
+        if lux is None:
+            return cur
+
+        if lux > high and can_close:
+            return max(0, cur - step)
+        if lux < low and can_open:
+            return min(100, cur + step)
+        return cur
+
+
 # ---------------------------------------------------------------------------
 # Registre
 # ---------------------------------------------------------------------------
@@ -346,6 +377,7 @@ STRATEGIES: dict[str, BaseStrategy] = {
     "always_closed": AlwaysClosedStrategy(),
     "always_open": AlwaysOpenStrategy(),
     "lux_target": LuxTargetStrategy(),
+    "lux_target_glare": LuxTargetGlareStrategy(),
 }
 
 STRATEGY_OPTIONS = {k: v.label for k, v in STRATEGIES.items()}
