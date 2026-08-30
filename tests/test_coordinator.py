@@ -524,3 +524,74 @@ class TestMergeSensorGroups:
     def test_empty_sensors_never_merge(self):
         resolved = {"A": set(), "B": set()}
         assert coordinator_module._merge_sensor_groups(resolved) == [["A"], ["B"]]
+
+
+# ---------------------------------------------------------------------------
+# Tests _resolve_lux_context
+# ---------------------------------------------------------------------------
+
+class TestResolveLuxContext:
+    """Tests pour la résolution du contexte lux (refactor de _compute_lux_target_position)."""
+
+    NOW = datetime(2026, 7, 25, 18, 40, 0, tzinfo=timezone.utc)
+
+    def _states(self, mock_hass, cover_position, cover_state_value="open", sensor_lux="0"):
+        cover_last_changed = self.NOW - timedelta(hours=2)
+        cover_state = _make_mock_state(
+            cover_state_value, cover_last_changed, cover_last_changed,
+            {"current_position": cover_position},
+        )
+        mapping = {"cover.test": cover_state}
+        if sensor_lux is not None:
+            sensor_last_updated = self.NOW - timedelta(hours=4)
+            mapping["sensor.lux_salon"] = _make_mock_state(
+                sensor_lux, sensor_last_updated, sensor_last_updated,
+                {"device_class": "illuminance"},
+            )
+        mock_hass.states.get.side_effect = lambda eid: mapping.get(eid)
+
+    def _compute(self, coordinator_instance, win):
+        with patch("sunny.coordinator.datetime") as mock_dt:
+            mock_dt.now.return_value = self.NOW
+            mock_dt.timezone = timezone
+            mock_dt.timedelta = timedelta
+            return coordinator_instance._resolve_lux_context(win)
+
+    def test_fresh_lux_with_sensors(self, coordinator_instance, mock_hass):
+        self._states(mock_hass, cover_position=50, sensor_lux="4000")
+        win = {"name": "Salon", "cover_entity": "cover.test",
+               "lux_sensors": ["sensor.lux_salon"]}
+        ctx = self._compute(coordinator_instance, win)
+        assert ctx["lux"] == 4000.0
+        assert ctx["current_position"] == 50
+        assert ctx["sensors"] == {"sensor.lux_salon"}
+
+    def test_no_sensors_lux_none(self, coordinator_instance, mock_hass):
+        self._states(mock_hass, cover_position=50, sensor_lux=None)
+        win = {"name": "Salon", "cover_entity": "cover.test", "lux_sensors": []}
+        ctx = self._compute(coordinator_instance, win)
+        assert ctx["lux"] is None
+        assert ctx["sensors"] == set()
+
+    def test_moving_cover_lux_none_and_previous_fallback(self, coordinator_instance, mock_hass):
+        sensor_last_updated = self.NOW - timedelta(hours=4)
+        sensor_state = _make_mock_state(
+            "0", sensor_last_updated, sensor_last_updated, {"device_class": "illuminance"},
+        )
+        cover_state = _make_mock_state("opening", self.NOW, self.NOW, {"current_position": 95})
+        mock_hass.states.get.side_effect = lambda eid: {
+            "cover.test": cover_state, "sensor.lux_salon": sensor_state,
+        }.get(eid)
+        coordinator_instance.data = {"Salon": {"desired_position": 90}}
+        win = {"name": "Salon", "cover_entity": "cover.test",
+               "lux_sensors": ["sensor.lux_salon"]}
+        ctx = self._compute(coordinator_instance, win)
+        assert ctx["lux"] is None
+        assert ctx["fallback"] == 90
+
+    def test_no_previous_data_fallback_is_current(self, coordinator_instance, mock_hass):
+        self._states(mock_hass, cover_position=50, sensor_lux=None)
+        coordinator_instance.data = {}
+        win = {"name": "Salon", "cover_entity": "cover.test", "lux_sensors": []}
+        ctx = self._compute(coordinator_instance, win)
+        assert ctx["fallback"] == 50

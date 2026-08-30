@@ -129,11 +129,18 @@ class SunnyCoordinator(DataUpdateCoordinator):
             return None
         return window_data.get("desired_position")
 
-    def _compute_lux_target_position(self, win: dict, strategy) -> int:
-        """Calcule la position pour une fenêtre en stratégie lux_target.
+    def _resolve_lux_context(self, win: dict) -> dict:
+        """Résout le contexte lux d'une fenêtre.
 
-        Retourne la position inchangée si aucun capteur frais.
+        Retourne un dict avec :
+        - "lux" : valeur lux agrégée, ou None si capteur indisponible/stale
+          ou volet en mouvement
+        - "fallback" : position de repli (snapshot précédent si disponible,
+          sinon position courante du volet)
+        - "current_position" : position courante du volet (100 si inconnue)
+        - "sensors" : ensemble des capteurs lux résolus
         """
+        name = win.get("name", "Fenêtre")
         cover_entity = win.get("cover_entity", "")
         cover_state = self.hass.states.get(cover_entity)
         current_position = 100
@@ -147,26 +154,35 @@ class SunnyCoordinator(DataUpdateCoordinator):
                     pass
             cover_last_changed = cover_state.last_changed
 
-        previous_desired = self._previous_desired(win.get("name", "Fenêtre"))
+        previous_desired = self._previous_desired(name)
+        fallback = previous_desired if previous_desired is not None else current_position
 
         # Volet en mouvement : la position instantanée ne correspondra pas à
         # la position d'arrêt et le capteur lux ne reflète pas la position
         # finale → conserver le snapshot précédent pour éviter que le switch
         # ne prenne le settle pour une intervention manuelle.
         if cover_state is not None and str(cover_state.state) in ("opening", "closing", "moving"):
-            if previous_desired is not None:
-                return previous_desired
-            return current_position
+            return {
+                "lux": None,
+                "fallback": fallback,
+                "current_position": current_position,
+                "sensors": set(),
+            }
 
         sensor_ids = self._resolve_lux_sensors(win)
         if not sensor_ids:
             _LOGGER.warning(
                 "Aucun capteur lux trouvé pour la fenêtre '%s' (lux_sensors=%s, lux_area_id=%s)",
-                win.get("name", "Inconnue"),
+                name,
                 win.get("lux_sensors", []),
                 win.get("lux_area_id"),
             )
-            return previous_desired if previous_desired is not None else current_position
+            return {
+                "lux": None,
+                "fallback": fallback,
+                "current_position": current_position,
+                "sensors": set(),
+            }
 
         fresh_values = []
         stale_count = 0
@@ -198,28 +214,49 @@ class SunnyCoordinator(DataUpdateCoordinator):
         if not fresh_values:
             _LOGGER.info(
                 "Aucun capteur frais pour la fenêtre '%s' (%d stale sur %d), position inchangée à %d",
-                win.get("name", "Inconnue"), stale_count, len(sensor_ids), current_position,
+                name, stale_count, len(sensor_ids), fallback,
             )
-            return previous_desired if previous_desired is not None else current_position
+            return {
+                "lux": None,
+                "fallback": fallback,
+                "current_position": current_position,
+                "sensors": set(sensor_ids),
+            }
 
         lux_value = sum(fresh_values) / len(fresh_values)
         _LOGGER.debug(
             "Lux agrégé pour '%s': %.0f lx (moyenne de %d capteurs)",
-            win.get("name", "Inconnue"), lux_value, len(fresh_values),
+            name, lux_value, len(fresh_values),
         )
+        return {
+            "lux": lux_value,
+            "fallback": fallback,
+            "current_position": current_position,
+            "sensors": set(sensor_ids),
+        }
+
+    def _compute_lux_target_position(self, win: dict, strategy) -> int:
+        """Calcule la position pour une fenêtre en stratégie lux_target.
+
+        Retourne la position inchangée si aucun capteur frais.
+        """
+        ctx = self._resolve_lux_context(win)
+        lux = ctx["lux"]
+        if lux is None:
+            return ctx["fallback"]
 
         data = {
-            "lux_value": lux_value,
-            "current_position": current_position,
+            "lux_value": lux,
+            "current_position": ctx["current_position"],
             "lux_high": win.get("lux_high", DEFAULT_LUX_HIGH),
             "lux_low": win.get("lux_low", DEFAULT_LUX_LOW),
             "lux_step": win.get("lux_step", DEFAULT_LUX_STEP),
         }
         new_position = strategy.compute_position(data)
-        if new_position != current_position:
+        if new_position != ctx["current_position"]:
             _LOGGER.info(
                 "Lux target '%s': lux=%.0f lx, position %d → %d",
-                win.get("name", "Inconnue"), lux_value, current_position, new_position,
+                win.get("name", "Inconnue"), lux, ctx["current_position"], new_position,
             )
         return new_position
 
