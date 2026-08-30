@@ -11,7 +11,7 @@ Home Assistant custom integration to automatically control blinds/shutters based
 ## Commands
 
 ```bash
-python3 -m pytest tests/ -v    # 234 unit tests (solar_math + strategies + switch + number + button + services)
+python3 -m pytest tests/ -v    # 319 unit tests (solar_math + strategies + coordinator + switch + number + button + services)
 ```
 
 GitHub CI also validates HACS (`hacs/action`) and hassfest (`home-assistant/actions/hassfest`). No lint, no typecheck, no build.
