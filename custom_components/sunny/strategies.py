@@ -195,8 +195,7 @@ def compute_glare_flags(
 ) -> dict[str, dict[str, bool]]:
     """Calcule les flags can_open / can_close pour la priorité anti-éblouissement.
 
-    Tier 0 = pas de soleil direct, tier 1 = soleil direct. Un flag n'est vrai
-    que si la fenêtre a elle-même la marge correspondante.
+    Tier 0 = pas de soleil direct, tier 1 = soleil direct.
 
     - Ouverture : une fenêtre tier 0 ouvre toujours ; une fenêtre tier 1
       n'ouvre que lorsqu'aucune fenêtre tier 0 de son groupe n'a de marge.
@@ -212,8 +211,8 @@ def compute_glare_flags(
         for name in group:
             tier = tiers.get(name, 0)
             flags[name] = {
-                "can_open": open_margins.get(name, False) and (tier == 0 or tier0_saturated_open),
-                "can_close": close_margins.get(name, False) and (tier == 1 or tier1_saturated_close),
+                "can_open": tier == 0 or tier0_saturated_open,
+                "can_close": tier == 1 or tier1_saturated_close,
             }
     return flags
 

@@ -662,14 +662,16 @@ class TestComputeGlareFlags:
         flags = strategies.compute_glare_flags(
             [["A", "B"]], {"A": 0, "B": 1}, {"A": False, "B": True}, {"A": True, "B": True}
         )
-        assert flags["A"]["can_open"] is False
+        # Une fenêtre tier 0 ouvre toujours ; son mouvement est borné par le clamp.
+        assert flags["A"]["can_open"] is True
         assert flags["B"]["can_open"] is True
 
     def test_tier1_saturated_tier0_closes(self):
         flags = strategies.compute_glare_flags(
             [["A", "B"]], {"A": 0, "B": 1}, {"A": True, "B": True}, {"A": True, "B": False}
         )
-        assert flags["B"]["can_close"] is False
+        # Une fenêtre tier 1 ferme toujours ; son mouvement est borné par le clamp.
+        assert flags["B"]["can_close"] is True
         assert flags["A"]["can_close"] is True
 
     def test_two_tier0_windows_open_together(self):
