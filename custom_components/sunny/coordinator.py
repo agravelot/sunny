@@ -34,7 +34,7 @@ from .const import (
     DEFAULT_STAGGER_DELAY,
 )
 from .solar_math import compute_window
-from .strategies import get_strategy
+from .strategies import compute_glare_flags, get_strategy
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -260,6 +260,69 @@ class SunnyCoordinator(DataUpdateCoordinator):
             )
         return new_position
 
+    def _apply_lux_glare(self, lux_ctx: dict, results: dict, windows: list) -> None:
+        """Calcule desired_position des fenêtres en stratégie lux_target_glare.
+
+        Regroupe les fenêtres partageant au moins un capteur lux résolu, puis
+        applique la priorité anti-éblouissement : ouverture des fenêtres sans
+        soleil direct en premier, fermeture des fenêtres ensoleillées en
+        premier. Les fenêtres d'exposition similaire bougent ensemble.
+        """
+        strategy = get_strategy("lux_target_glare")
+        wins_by_name = {w.get("name", "Fenêtre"): w for w in windows}
+        resolved = {name: ctx["sensors"] for name, ctx in lux_ctx.items()}
+        groups = _merge_sensor_groups(resolved)
+
+        tiers = {
+            name: (0 if results[name].get("lit_pct", 0) == 0 else 1)
+            for name in lux_ctx
+        }
+        open_margins: dict[str, bool] = {}
+        close_margins: dict[str, bool] = {}
+        bounds: dict[str, tuple[int, int]] = {}
+        for name in lux_ctx:
+            win = wins_by_name.get(name, {})
+            min_pos = int(win.get(CONF_MIN_POSITION, DEFAULT_MIN_POSITION))
+            max_pos = int(win.get(CONF_MAX_POSITION, DEFAULT_MAX_POSITION))
+            bounds[name] = (min_pos, max_pos)
+            prev = self._previous_desired(name)
+            # Premier cycle sans historique : marge considérée disponible
+            open_margins[name] = True if prev is None else prev < max_pos
+            close_margins[name] = True if prev is None else prev > min_pos
+
+        flags = compute_glare_flags(groups, tiers, open_margins, close_margins)
+
+        for name, ctx in lux_ctx.items():
+            win = wins_by_name.get(name, {})
+            min_pos, max_pos = bounds[name]
+            lux = ctx["lux"]
+            if lux is None:
+                new_position = ctx["fallback"]
+            else:
+                data = {
+                    "lux_value": lux,
+                    "current_position": ctx["current_position"],
+                    "lux_high": win.get(CONF_LUX_HIGH, DEFAULT_LUX_HIGH),
+                    "lux_low": win.get(CONF_LUX_LOW, DEFAULT_LUX_LOW),
+                    "lux_step": win.get(CONF_LUX_STEP, DEFAULT_LUX_STEP),
+                    "can_open": flags[name]["can_open"],
+                    "can_close": flags[name]["can_close"],
+                }
+                new_position = strategy.compute_position(data)
+                _LOGGER.debug(
+                    "Lux glare '%s': lux=%.0f lx, tier=%d, can_open=%s, can_close=%s",
+                    name, lux, tiers[name], flags[name]["can_open"], flags[name]["can_close"],
+                )
+            results[name]["desired_position"] = max(min_pos, min(max_pos, new_position))
+            if results[name]["desired_position"] != ctx["current_position"]:
+                _LOGGER.info(
+                    "Lux glare '%s': lux=%s, position %d → %d",
+                    name,
+                    f"{lux:.0f} lx" if lux is not None else "n/a",
+                    ctx["current_position"],
+                    results[name]["desired_position"],
+                )
+
     async def _async_update_data(self) -> dict:
         sun = self.hass.states.get("sun.sun")
         if sun is None:
@@ -287,6 +350,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 weather_data["temperature"] = weather.attributes.get("temperature")
 
         results = {}
+        lux_ctx: dict[str, dict] = {}
         windows = self.entry.options.get("windows", [])
         for idx, win in enumerate(windows):
             name = win.get("name", "Fenêtre")
@@ -335,13 +399,17 @@ class SunnyCoordinator(DataUpdateCoordinator):
             strategy_name = win.get("strategy", "block_all")
             strategy = get_strategy(strategy_name)
             data["strategy"] = strategy_name
-            if strategy_name == "lux_target":
+            if strategy_name == "lux_target_glare":
+                # Passe 2 : arbitrage par groupe de capteurs partagés
+                lux_ctx[name] = self._resolve_lux_context(win)
+            elif strategy_name == "lux_target":
                 data["desired_position"] = self._compute_lux_target_position(win, strategy)
             else:
                 data["desired_position"] = strategy.compute_position(data)
-            min_pos = int(win.get(CONF_MIN_POSITION, DEFAULT_MIN_POSITION))
-            max_pos = int(win.get(CONF_MAX_POSITION, DEFAULT_MAX_POSITION))
-            data["desired_position"] = max(min_pos, min(max_pos, data["desired_position"]))
+            if strategy_name != "lux_target_glare":
+                min_pos = int(win.get(CONF_MIN_POSITION, DEFAULT_MIN_POSITION))
+                max_pos = int(win.get(CONF_MAX_POSITION, DEFAULT_MAX_POSITION))
+                data["desired_position"] = max(min_pos, min(max_pos, data["desired_position"]))
             data["cloud_coverage"] = weather_data["cloud_coverage"]
             data["weather_condition"] = weather_data["weather_condition"]
             data["temperature"] = weather_data["temperature"]
@@ -349,5 +417,8 @@ class SunnyCoordinator(DataUpdateCoordinator):
             data["longitude"] = lon
             data["window_idx"] = idx
             results[name] = data
+
+        if lux_ctx:
+            self._apply_lux_glare(lux_ctx, results, windows)
 
         return results

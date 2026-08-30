@@ -595,3 +595,122 @@ class TestResolveLuxContext:
         win = {"name": "Salon", "cover_entity": "cover.test", "lux_sensors": []}
         ctx = self._compute(coordinator_instance, win)
         assert ctx["fallback"] == 50
+
+
+# ---------------------------------------------------------------------------
+# Tests _apply_lux_glare — arbitrage anti-éblouissement par groupe
+# ---------------------------------------------------------------------------
+
+class TestApplyLuxGlare:
+    """Scénario réel : grand (ouest), petit salon (sud) et cuisine (sud)
+    partagent le capteur lux du salon."""
+
+    def _windows(self):
+        return [
+            {"name": "Grand", "cover_entity": "cover.grand",
+             "strategy": "lux_target_glare", "lux_sensors": ["sensor.salon_lux"]},
+            {"name": "Petit salon", "cover_entity": "cover.petit",
+             "strategy": "lux_target_glare", "lux_area_id": "salon"},
+            {"name": "Cuisine", "cover_entity": "cover.cuisine",
+             "strategy": "lux_target_glare", "lux_sensors": ["sensor.salon_lux"]},
+        ]
+
+    def _results(self):
+        return {
+            "Grand": {"lit_pct": 0.0, "strategy": "lux_target_glare"},
+            "Petit salon": {"lit_pct": 60.0, "strategy": "lux_target_glare"},
+            "Cuisine": {"lit_pct": 55.0, "strategy": "lux_target_glare"},
+        }
+
+    def _ctx(self, lux=1000.0):
+        """Contexte lux : les 3 fenêtres résolvent sensor.salon_lux."""
+        def _one(pos=50):
+            return {"lux": lux, "fallback": pos, "current_position": pos,
+                    "sensors": {"sensor.salon_lux"}}
+        return {
+            "Grand": _one(),
+            "Petit salon": _one(),
+            "Cuisine": _one(),
+        }
+
+    def test_too_dark_tier0_opens_tier1_holds(self, coordinator_instance):
+        """Trop sombre : le grand (sans soleil direct) ouvre, les autres tiennent."""
+        coordinator_instance.data = {}
+        results = self._results()
+        coordinator_instance._apply_lux_glare(self._ctx(1000.0), results, self._windows())
+        assert results["Grand"]["desired_position"] == 60
+        assert results["Petit salon"]["desired_position"] == 50
+        assert results["Cuisine"]["desired_position"] == 50
+
+    def test_too_dark_tier0_saturated_tier1_open_together(self, coordinator_instance):
+        """Grand saturé à 100 : petit salon ET cuisine ouvrent ensemble."""
+        coordinator_instance.data = {"Grand": {"desired_position": 100}}
+        ctx = self._ctx(1000.0)
+        ctx["Grand"]["current_position"] = 100  # déjà ouvert physiquement
+        ctx["Grand"]["fallback"] = 100
+        results = self._results()
+        coordinator_instance._apply_lux_glare(ctx, results, self._windows())
+        assert results["Grand"]["desired_position"] == 100
+        assert results["Petit salon"]["desired_position"] == 60
+        assert results["Cuisine"]["desired_position"] == 60
+
+    def test_too_bright_tier1_closes_tier0_holds(self, coordinator_instance):
+        """Trop clair : les fenêtres ensoleillées ferment, le grand tient."""
+        coordinator_instance.data = {}
+        results = self._results()
+        coordinator_instance._apply_lux_glare(self._ctx(6000.0), results, self._windows())
+        assert results["Grand"]["desired_position"] == 50
+        assert results["Petit salon"]["desired_position"] == 40
+        assert results["Cuisine"]["desired_position"] == 40
+
+    def test_too_bright_tier1_saturated_tier0_closes(self, coordinator_instance):
+        """Ensoleillées déjà fermées : le grand ferme à son tour."""
+        coordinator_instance.data = {
+            "Grand": {"desired_position": 50},
+            "Petit salon": {"desired_position": 0},
+            "Cuisine": {"desired_position": 0},
+        }
+        ctx = self._ctx(6000.0)
+        ctx["Petit salon"]["current_position"] = 0  # déjà fermé physiquement
+        ctx["Petit salon"]["fallback"] = 0
+        ctx["Cuisine"]["current_position"] = 0
+        ctx["Cuisine"]["fallback"] = 0
+        results = self._results()
+        coordinator_instance._apply_lux_glare(ctx, results, self._windows())
+        assert results["Grand"]["desired_position"] == 40
+        assert results["Petit salon"]["desired_position"] == 0
+        assert results["Cuisine"]["desired_position"] == 0
+
+    def test_lux_none_fallback_for_all(self, coordinator_instance):
+        """Pas de capteur frais : position de repli, quel que soit le tier."""
+        coordinator_instance.data = {}
+        ctx = self._ctx(lux=None)
+        results = self._results()
+        coordinator_instance._apply_lux_glare(ctx, results, self._windows())
+        assert results["Grand"]["desired_position"] == 50
+        assert results["Petit salon"]["desired_position"] == 50
+        assert results["Cuisine"]["desired_position"] == 50
+
+    def test_no_sensor_window_is_singleton(self, coordinator_instance):
+        """Fenêtre sans capteur résolu : groupe singleton, repli sur fallback."""
+        coordinator_instance.data = {}
+        ctx = {
+            "Isolée": {"lux": None, "fallback": 42, "current_position": 30,
+                       "sensors": set()},
+        }
+        results = {"Isolée": {"lit_pct": 0.0, "strategy": "lux_target_glare"}}
+        windows = [{"name": "Isolée", "cover_entity": "cover.x",
+                    "strategy": "lux_target_glare", "lux_sensors": []}]
+        coordinator_instance._apply_lux_glare(ctx, results, windows)
+        assert results["Isolée"]["desired_position"] == 42
+
+    def test_respects_max_position_clamp(self, coordinator_instance):
+        """Le clamp min/max de la fenêtre s'applique après la stratégie."""
+        coordinator_instance.data = {}
+        windows = self._windows()
+        windows[0]["max_position"] = 55  # Grand plafonné à 55
+        ctx = self._ctx(1000.0)
+        ctx["Grand"]["current_position"] = 50
+        results = self._results()
+        coordinator_instance._apply_lux_glare(ctx, results, windows)
+        assert results["Grand"]["desired_position"] == 55
