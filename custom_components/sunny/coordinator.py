@@ -39,6 +39,31 @@ from .strategies import get_strategy
 _LOGGER = logging.getLogger(__name__)
 
 
+def _merge_sensor_groups(resolved: dict[str, set[str]]) -> list[list[str]]:
+    """Fusionne les fenêtres partageant au moins un capteur lux résolu.
+
+    Chaque groupe est une liste de noms de fenêtres. Deux fenêtres dont les
+    ensembles de capteurs s'intersectent — directement ou via une chaîne —
+    finissent dans le même groupe.
+    """
+    groups = [[name] for name in resolved]
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(groups)):
+            merged = False
+            for j in range(i + 1, len(groups)):
+                if any(resolved[a] & resolved[b] for a in groups[i] for b in groups[j]):
+                    groups[i].extend(groups[j])
+                    del groups[j]
+                    merged = True
+                    changed = True
+                    break
+            if merged:
+                break
+    return groups
+
+
 class SunnyCoordinator(DataUpdateCoordinator):
     """Coordinateur qui recalcule l'ensoleillement périodiquement."""
 

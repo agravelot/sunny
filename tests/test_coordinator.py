@@ -499,3 +499,28 @@ class TestComputeLuxTargetPreviousDesired:
         result = self._compute(coordinator_instance, self._win([]), strategy)
 
         assert result == 90
+
+# ---------------------------------------------------------------------------
+# Tests _merge_sensor_groups
+# ---------------------------------------------------------------------------
+
+class TestMergeSensorGroups:
+    """Tests pour le regroupement par capteurs résolus partagés."""
+
+    def test_no_intersection_separate(self):
+        resolved = {"Grand": {"s1"}, "Cuisine": {"s2"}}
+        assert coordinator_module._merge_sensor_groups(resolved) == [["Grand"], ["Cuisine"]]
+
+    def test_shared_sensor_merged(self):
+        """Salon (area) + cuisine (manuelle) résolvent la même entité → même groupe."""
+        resolved = {"Grand": {"sensor.salon_lux"}, "Cuisine": {"sensor.salon_lux"}}
+        assert coordinator_module._merge_sensor_groups(resolved) == [["Grand", "Cuisine"]]
+
+    def test_chained_merge(self):
+        resolved = {"A": {"s1"}, "B": {"s1", "s2"}, "C": {"s2"}}
+        groups = coordinator_module._merge_sensor_groups(resolved)
+        assert sorted(groups) == [["A", "B", "C"]]
+
+    def test_empty_sensors_never_merge(self):
+        resolved = {"A": set(), "B": set()}
+        assert coordinator_module._merge_sensor_groups(resolved) == [["A"], ["B"]]
