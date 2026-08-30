@@ -77,6 +77,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._command_target: int | None = None
         self._command_threshold: int = DEFAULT_POSITION_THRESHOLD
         self._command_expires_at: float = 0
+        self._last_command_target: int | None = None
 
     def _set_command_target(self, position: int, threshold: int) -> None:
         """Enregistre la cible suivie par le pilotage auto avec une échéance."""
@@ -87,6 +88,19 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 "command_timeout", DEFAULT_COMMAND_TIMEOUT
             )
         )
+
+    def _release_command(self) -> None:
+        """Termine une commande auto arrivée à destination.
+
+        La cible est conservée dans `_last_command_target` pour que les
+        events de settle qui suivent l'arrivée ne soient pas interprétés
+        comme une intervention manuelle (le snapshot `desired_position` du
+        coordinateur peut avoir dérivé pendant le mouvement, ex. lux_target).
+        """
+        if self._command_target is not None:
+            self._last_command_target = self._command_target
+        self._command_target = None
+        self._command_expires_at = 0
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -116,13 +130,12 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 if self._command_target is not None:
                     if self._expired():
                         if self._command_was_overridden(
-                            desired_position, threshold, cover_entity
+                            self._command_target, threshold, cover_entity
                         ):
                             self._disable_auto()
                             self.async_write_ha_state()
                             return
-                        self._command_target = None
-                        self._command_expires_at = 0
+                        self._release_command()
                     else:
                         self.async_write_ha_state()
                         return
@@ -150,14 +163,14 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         # sauf en cas d'intervention manuelle.
         if self._command_target is not None:
             if abs(new_position - self._command_target) <= self._command_threshold:
-                self._command_target = None
-                self._command_expires_at = 0
+                self._release_command()
                 return
             old_state = event.data.get("old_state")
             if not self._manual_intervention(old_state, new_state, new_position):
                 return
             self._command_target = None
             self._command_expires_at = 0
+            self._last_command_target = None
 
         data = self.coordinator.data.get(self._window_name)
         if data is None:
@@ -168,6 +181,14 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 "position_threshold", DEFAULT_POSITION_THRESHOLD
             ))
             if not self._position_differs(new_position, desired, threshold):
+                return
+            # Event de settle juste après l'arrivée : la position désirée peut
+            # avoir été recalculée pendant le mouvement → ne pas désactiver si
+            # le volet est bien à la cible auto précédente.
+            if (
+                self._last_command_target is not None
+                and abs(new_position - self._last_command_target) <= threshold
+            ):
                 return
 
         self._disable_auto()
@@ -281,6 +302,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._attr_is_on = False
         self._command_target = None
         self._command_expires_at = 0
+        self._last_command_target = None
         _LOGGER.info(
             "Pilotage auto désactivé pour %s (intervention manuelle détectée)",
             self._window_name,
@@ -305,4 +327,5 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._attr_is_on = False
         self._command_target = None
         self._command_expires_at = 0
+        self._last_command_target = None
         self.async_write_ha_state()

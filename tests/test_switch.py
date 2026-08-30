@@ -351,6 +351,23 @@ class TestSunnyAutoControlSwitch:
         mock_hass.async_create_task.assert_not_called()
         switch_instance.async_write_ha_state.assert_called_once()
 
+    def test_expired_command_reached_target_reapplies_new_desired(self, switch_instance, mock_coordinator, mock_hass):
+        """Commande expirée mais cible commandée atteinte → pas de disable,
+        la nouvelle position désirée (dérivée entre-temps) est appliquée."""
+        switch_instance._attr_is_on = True
+        switch_instance._command_target = 50
+        switch_instance._command_expires_at = time.monotonic() - 1
+        switch_instance.async_write_ha_state = MagicMock()
+        mock_hass.async_create_task.reset_mock()
+        mock_coordinator.data["Test"]["desired_position"] = 60
+        switch_instance.hass.states.get.return_value = _mock_state("50")
+
+        switch_instance._handle_coordinator_update()
+
+        assert switch_instance._attr_is_on is True
+        assert switch_instance._command_target == 60
+        mock_hass.async_create_task.assert_called_once()
+
     @pytest.mark.asyncio
     async def test_apply_position_error_is_logged(self, switch_instance, mock_hass):
         mock_hass.services.async_call.side_effect = RuntimeError("cover indisponible")
@@ -1087,6 +1104,53 @@ class TestOnCoverStateChange:
         assert s._attr_is_on is True
         assert s._command_target is None
         s.async_write_ha_state.assert_not_called()
+
+    # --- régression : settle après arrivée (snapshot desired périmé) ---
+
+    def test_settle_after_arrival_does_not_disable(self, mock_hass):
+        """Arrivée à la cible auto puis event de settle : le snapshot
+        desired_position peut être périmé (lux_target) → pas de désactivation."""
+        s = self._make_switch(mock_hass, desired_position=95)
+        s._attr_is_on = True
+        s._command_target = 90
+        s._command_threshold = 3
+
+        # Arrivée : position à la cible → command_target clear
+        s._on_cover_state_change(self._event(
+            "opening", current_position=90,
+            old_state_value="opening", old_current_position=95,
+        ))
+        assert s._command_target is None
+
+        # Settle : opening→open, position inchangée
+        s._on_cover_state_change(self._event(
+            "open", current_position=90,
+            old_state_value="opening", old_current_position=90,
+        ))
+
+        assert s._attr_is_on is True
+        s.async_write_ha_state.assert_not_called()
+
+    def test_manual_move_after_arrival_still_disables(self, mock_hass):
+        """Après l'arrivée, une vraie intervention manuelle désactive toujours."""
+        s = self._make_switch(mock_hass, desired_position=95)
+        s._attr_is_on = True
+        s._command_target = 90
+        s._command_threshold = 3
+
+        s._on_cover_state_change(self._event(
+            "opening", current_position=90,
+            old_state_value="opening", old_current_position=95,
+        ))
+        assert s._command_target is None
+
+        s._on_cover_state_change(self._event(
+            "open", current_position=50,
+            old_state_value="open", old_current_position=90,
+        ))
+
+        assert s._attr_is_on is False
+        s.async_write_ha_state.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

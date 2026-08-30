@@ -90,6 +90,20 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 sensors.append(entity.entity_id)
         return sensors
 
+    def _previous_desired(self, name: str) -> int | None:
+        """Position désirée calculée au rafraîchissement précédent.
+
+        Sert de référence stable quand la position courante du volet n'est
+        pas fiable (mouvement en cours, capteurs lux pollués par le store).
+        """
+        data = getattr(self, "data", None)
+        if not data:
+            return None
+        window_data = data.get(name)
+        if not window_data:
+            return None
+        return window_data.get("desired_position")
+
     def _compute_lux_target_position(self, win: dict, strategy) -> int:
         """Calcule la position pour une fenêtre en stratégie lux_target.
 
@@ -108,6 +122,17 @@ class SunnyCoordinator(DataUpdateCoordinator):
                     pass
             cover_last_changed = cover_state.last_changed
 
+        previous_desired = self._previous_desired(win.get("name", "Fenêtre"))
+
+        # Volet en mouvement : la position instantanée ne correspondra pas à
+        # la position d'arrêt et le capteur lux ne reflète pas la position
+        # finale → conserver le snapshot précédent pour éviter que le switch
+        # ne prenne le settle pour une intervention manuelle.
+        if cover_state is not None and str(cover_state.state) in ("opening", "closing", "moving"):
+            if previous_desired is not None:
+                return previous_desired
+            return current_position
+
         sensor_ids = self._resolve_lux_sensors(win)
         if not sensor_ids:
             _LOGGER.warning(
@@ -116,7 +141,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 win.get("lux_sensors", []),
                 win.get("lux_area_id"),
             )
-            return current_position
+            return previous_desired if previous_desired is not None else current_position
 
         fresh_values = []
         stale_count = 0
@@ -150,7 +175,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 "Aucun capteur frais pour la fenêtre '%s' (%d stale sur %d), position inchangée à %d",
                 win.get("name", "Inconnue"), stale_count, len(sensor_ids), current_position,
             )
-            return current_position
+            return previous_desired if previous_desired is not None else current_position
 
         lux_value = sum(fresh_values) / len(fresh_values)
         _LOGGER.debug(

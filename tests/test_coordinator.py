@@ -401,3 +401,101 @@ class TestComputeLuxTargetStale:
             result = coordinator_instance._compute_lux_target_position(win, strategy)
 
         assert result == 41  # 60s exact → pas stale → ouvert: 31 + 10 = 41
+
+
+# ---------------------------------------------------------------------------
+# Tests _compute_lux_target_position — snapshot stable pendant le mouvement
+# ---------------------------------------------------------------------------
+
+class TestComputeLuxTargetPreviousDesired:
+    """Régression : fallback sur la position désirée précédente.
+
+    lux_target calcule la position à partir de la position courante du
+    volet. Si un rafraîchissement tombe pendant le mouvement (ou la grâce
+    de 60s), le snapshot `desired_position` stocké ne correspond plus à la
+    position d'arrêt et le switch désactive le pilotage auto à tort.
+    """
+
+    NOW = datetime(2026, 7, 25, 18, 40, 0, tzinfo=timezone.utc)
+
+    def _win(self, sensors):
+        return {
+            "name": "Salon",
+            "cover_entity": "cover.test",
+            "lux_sensors": sensors,
+            "lux_high": 5000,
+            "lux_low": 3000,
+            "lux_step": 10,
+        }
+
+    def _states(self, mock_hass, cover_state_value, cover_last_changed, current_position, sensor_state=None):
+        cover_state = _make_mock_state(
+            cover_state_value, cover_last_changed, cover_last_changed,
+            {"current_position": current_position},
+        )
+        mapping = {"cover.test": cover_state}
+        if sensor_state is not None:
+            mapping["sensor.lux_salon"] = sensor_state
+        mock_hass.states.get.side_effect = lambda eid: mapping.get(eid)
+
+    def _stale_sensor(self):
+        sensor_last_updated = self.NOW - timedelta(hours=4)
+        return _make_mock_state(
+            "0", sensor_last_updated, sensor_last_updated,
+            {"device_class": "illuminance"},
+        )
+
+    def _compute(self, coordinator_instance, win, strategy):
+        with patch("sunny.coordinator.datetime") as mock_dt:
+            mock_dt.now.return_value = self.NOW
+            mock_dt.timezone = timezone
+            mock_dt.timedelta = timedelta
+            return coordinator_instance._compute_lux_target_position(win, strategy)
+
+    def test_stale_returns_previous_desired(self, coordinator_instance, mock_hass):
+        cover_last_changed = self.NOW - timedelta(seconds=30)
+        self._states(mock_hass, "open", cover_last_changed, 31, self._stale_sensor())
+        coordinator_instance.data = {"Salon": {"desired_position": 90}}
+        strategy = MagicMock()
+        strategy.compute_position.return_value = 41
+
+        result = self._compute(coordinator_instance, self._win(["sensor.lux_salon"]), strategy)
+
+        assert result == 90  # stale → conserve la position désirée précédente
+
+    def test_stale_without_previous_data_returns_current_position(self, coordinator_instance, mock_hass):
+        cover_last_changed = self.NOW - timedelta(seconds=30)
+        self._states(mock_hass, "open", cover_last_changed, 31, self._stale_sensor())
+        strategy = MagicMock()
+        strategy.compute_position.return_value = 41
+
+        result = self._compute(coordinator_instance, self._win(["sensor.lux_salon"]), strategy)
+
+        assert result == 31  # pas de snapshot précédent → repli sur la position courante
+
+    def test_cover_moving_returns_previous_desired(self, coordinator_instance, mock_hass):
+        """Volet en mouvement : la position instantanée n'est pas fiable."""
+        sensor_last_updated = self.NOW - timedelta(hours=4)
+        sensor_state = _make_mock_state(
+            "0", sensor_last_updated, sensor_last_updated,
+            {"device_class": "illuminance"},
+        )
+        self._states(mock_hass, "opening", self.NOW, 95, sensor_state)
+        coordinator_instance.data = {"Salon": {"desired_position": 90}}
+        strategy = MagicMock()
+        strategy.compute_position.return_value = 41
+
+        result = self._compute(coordinator_instance, self._win(["sensor.lux_salon"]), strategy)
+
+        assert result == 90  # volet en mouvement → conserve le snapshot précédent
+
+    def test_no_sensors_returns_previous_desired(self, coordinator_instance, mock_hass):
+        cover_last_changed = self.NOW - timedelta(hours=2)
+        self._states(mock_hass, "open", cover_last_changed, 31)
+        coordinator_instance.data = {"Salon": {"desired_position": 90}}
+        strategy = MagicMock()
+        strategy.compute_position.return_value = 41
+
+        result = self._compute(coordinator_instance, self._win([]), strategy)
+
+        assert result == 90
