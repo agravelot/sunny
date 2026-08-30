@@ -248,9 +248,9 @@ class SunnyCoordinator(DataUpdateCoordinator):
         data = {
             "lux_value": lux,
             "current_position": ctx["current_position"],
-            "lux_high": win.get("lux_high", DEFAULT_LUX_HIGH),
-            "lux_low": win.get("lux_low", DEFAULT_LUX_LOW),
-            "lux_step": win.get("lux_step", DEFAULT_LUX_STEP),
+            "lux_high": win.get(CONF_LUX_HIGH, DEFAULT_LUX_HIGH),
+            "lux_low": win.get(CONF_LUX_LOW, DEFAULT_LUX_LOW),
+            "lux_step": win.get(CONF_LUX_STEP, DEFAULT_LUX_STEP),
         }
         new_position = strategy.compute_position(data)
         if new_position != ctx["current_position"]:

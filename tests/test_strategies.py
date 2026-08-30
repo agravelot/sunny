@@ -688,3 +688,12 @@ class TestComputeGlareFlags:
         )
         assert flags["A"] == {"can_open": True, "can_close": True}
         assert flags["B"] == {"can_open": True, "can_close": True}
+
+    def test_group_only_tier1_all_can_open(self):
+        """Groupe sans tier 0 : saturation vacue (all([])) → tous peuvent ouvrir."""
+        flags = strategies.compute_glare_flags(
+            [["A", "B"]], {"A": 1, "B": 1}, {"A": True, "B": True}, {"A": True, "B": True}
+        )
+        assert flags["A"]["can_open"] is True
+        assert flags["B"]["can_open"] is True
+        assert flags["A"]["can_close"] is True

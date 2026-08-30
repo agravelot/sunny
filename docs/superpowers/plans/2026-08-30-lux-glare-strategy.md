@@ -281,6 +281,8 @@ git add custom_components/sunny/strategies.py tests/test_strategies.py
 git commit -m "add glare priority flags computation"
 ```
 
+> **Note post-exécution** : les tests 3 et 4 du brief contredisaient la formule de la spec (`can_open`/`can_close` sans AND sur la marge propre) ; corrigés en faveur de la spec par le commit 6c26483.
+
 ---
 
 ### Task 3: Regroupement `_merge_sensor_groups` (coordinator)
@@ -676,8 +678,11 @@ class TestApplyLuxGlare:
     def test_too_dark_tier0_saturated_tier1_open_together(self, coordinator_instance):
         """Grand saturé à 100 : petit salon ET cuisine ouvrent ensemble."""
         coordinator_instance.data = {"Grand": {"desired_position": 100}}
+        ctx = self._ctx(1000.0)
+        ctx["Grand"]["current_position"] = 100  # déjà ouvert physiquement
+        ctx["Grand"]["fallback"] = 100
         results = self._results()
-        coordinator_instance._apply_lux_glare(self._ctx(1000.0), results, self._windows())
+        coordinator_instance._apply_lux_glare(ctx, results, self._windows())
         assert results["Grand"]["desired_position"] == 100
         assert results["Petit salon"]["desired_position"] == 60
         assert results["Cuisine"]["desired_position"] == 60
@@ -698,8 +703,13 @@ class TestApplyLuxGlare:
             "Petit salon": {"desired_position": 0},
             "Cuisine": {"desired_position": 0},
         }
+        ctx = self._ctx(6000.0)
+        ctx["Petit salon"]["current_position"] = 0  # déjà fermé physiquement
+        ctx["Petit salon"]["fallback"] = 0
+        ctx["Cuisine"]["current_position"] = 0
+        ctx["Cuisine"]["fallback"] = 0
         results = self._results()
-        coordinator_instance._apply_lux_glare(self._ctx(6000.0), results, self._windows())
+        coordinator_instance._apply_lux_glare(ctx, results, self._windows())
         assert results["Grand"]["desired_position"] == 40
         assert results["Petit salon"]["desired_position"] == 0
         assert results["Cuisine"]["desired_position"] == 0

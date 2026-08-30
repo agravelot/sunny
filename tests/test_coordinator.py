@@ -714,3 +714,63 @@ class TestApplyLuxGlare:
         results = self._results()
         coordinator_instance._apply_lux_glare(ctx, results, windows)
         assert results["Grand"]["desired_position"] == 55
+
+
+# ---------------------------------------------------------------------------
+# Test e2e du câblage glare dans _async_update_data
+# ---------------------------------------------------------------------------
+
+class TestAsyncUpdateDataGlare:
+    """Test e2e : la branche d'activation glare dans _async_update_data.
+
+    Verrouille à la fois :
+    - le dispatch lux_target_glare (passe 1 sans clamp + _apply_lux_glare),
+    - le clamp différé de max_position en passe 2.
+    """
+
+    async def test_glare_dispatch_and_clamp(self, mock_hass):
+        entry = MagicMock()
+        entry.entry_id = "test_entry"
+        entry.data = {}
+        win_glare = {
+            "name": "Glare", "cover_entity": "cover.glare",
+            "strategy": "lux_target_glare", "lux_sensors": ["sensor.lux_salon"],
+            "orientation": 180, "max_position": 80,
+        }
+        win_control = {
+            "name": "Control", "cover_entity": "cover.control",
+            "strategy": "block_all", "orientation": 180,
+        }
+        entry.options = {"windows": [win_glare, win_control]}
+
+        coord = coordinator_module.SunnyCoordinator(mock_hass, entry)
+        coord.hass = mock_hass
+        coord.data = {}
+        mock_hass.config.latitude = 45.0
+        mock_hass.config.longitude = 5.0
+
+        old = datetime.now(timezone.utc) - timedelta(hours=2)
+        sun_state = _make_mock_state(
+            "above_horizon", old, old, {"elevation": 45.0, "azimuth": 180.0},
+        )
+        cover_state = _make_mock_state(
+            "open", old, old, {"current_position": 100},
+        )
+        sensor_state = _make_mock_state(
+            "9000", old, old, {"device_class": "illuminance"},
+        )
+        mock_hass.states.get.side_effect = lambda eid: {
+            "sun.sun": sun_state,
+            "cover.glare": cover_state,
+            "sensor.lux_salon": sensor_state,
+            "cover.control": None,
+        }.get(eid)
+
+        results = await coord._async_update_data()
+
+        assert "Glare" in results
+        # Soleil plein sud + lux 9000 > haut → fermeture : 100 - 10 = 90,
+        # clamp max_position=80 en passe 2 → 80.
+        assert results["Glare"]["desired_position"] == 80
+        assert "Control" in results
+        assert "desired_position" in results["Control"]
