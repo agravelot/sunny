@@ -633,3 +633,56 @@ class TestLuxTargetGlareStrategy:
         del data["can_open"]
         del data["can_close"]
         assert s.compute_position(data) == 60
+
+
+# -----------------------------------------------------------------------
+# compute_glare_flags
+# -----------------------------------------------------------------------
+
+class TestComputeGlareFlags:
+    """Tests pour le calcul des flags can_open / can_close.
+
+    Tier 0 = pas de soleil direct, tier 1 = soleil direct.
+    """
+
+    def test_singleton_group_open_and_close(self):
+        flags = strategies.compute_glare_flags(
+            [["A"]], {"A": 0}, {"A": True}, {"A": True}
+        )
+        assert flags["A"] == {"can_open": True, "can_close": True}
+
+    def test_tier0_opens_first_tier1_blocked(self):
+        flags = strategies.compute_glare_flags(
+            [["A", "B"]], {"A": 0, "B": 1}, {"A": True, "B": True}, {"A": True, "B": True}
+        )
+        assert flags["A"] == {"can_open": True, "can_close": False}
+        assert flags["B"] == {"can_open": False, "can_close": True}
+
+    def test_tier0_saturated_tier1_opens(self):
+        flags = strategies.compute_glare_flags(
+            [["A", "B"]], {"A": 0, "B": 1}, {"A": False, "B": True}, {"A": True, "B": True}
+        )
+        assert flags["A"]["can_open"] is False
+        assert flags["B"]["can_open"] is True
+
+    def test_tier1_saturated_tier0_closes(self):
+        flags = strategies.compute_glare_flags(
+            [["A", "B"]], {"A": 0, "B": 1}, {"A": True, "B": True}, {"A": True, "B": False}
+        )
+        assert flags["B"]["can_close"] is False
+        assert flags["A"]["can_close"] is True
+
+    def test_two_tier0_windows_open_together(self):
+        """Expositions similaires : mêmes flags, ouverture simultanée."""
+        flags = strategies.compute_glare_flags(
+            [["A", "B"]], {"A": 0, "B": 0}, {"A": True, "B": True}, {"A": True, "B": True}
+        )
+        assert flags["A"]["can_open"] is True
+        assert flags["B"]["can_open"] is True
+
+    def test_separate_groups_independent(self):
+        flags = strategies.compute_glare_flags(
+            [["A"], ["B"]], {"A": 0, "B": 1}, {"A": True, "B": True}, {"A": True, "B": True}
+        )
+        assert flags["A"] == {"can_open": True, "can_close": True}
+        assert flags["B"] == {"can_open": True, "can_close": True}

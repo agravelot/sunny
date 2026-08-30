@@ -187,6 +187,37 @@ def search_cover_position(data: dict, target_pct: float) -> int:
     return min(100, max(0, round((lo + hi) / 2.0)))
 
 
+def compute_glare_flags(
+    groups: list[list[str]],
+    tiers: dict[str, int],
+    open_margins: dict[str, bool],
+    close_margins: dict[str, bool],
+) -> dict[str, dict[str, bool]]:
+    """Calcule les flags can_open / can_close pour la priorité anti-éblouissement.
+
+    Tier 0 = pas de soleil direct, tier 1 = soleil direct. Un flag n'est vrai
+    que si la fenêtre a elle-même la marge correspondante.
+
+    - Ouverture : une fenêtre tier 0 ouvre toujours ; une fenêtre tier 1
+      n'ouvre que lorsqu'aucune fenêtre tier 0 de son groupe n'a de marge.
+    - Fermeture : une fenêtre tier 1 ferme toujours ; une fenêtre tier 0 ne
+      ferme que lorsqu'aucune fenêtre tier 1 de son groupe n'a de marge.
+    """
+    flags: dict[str, dict[str, bool]] = {}
+    for group in groups:
+        tier0 = [n for n in group if tiers.get(n, 0) == 0]
+        tier1 = [n for n in group if tiers.get(n, 0) == 1]
+        tier0_saturated_open = all(not open_margins.get(n, False) for n in tier0)
+        tier1_saturated_close = all(not close_margins.get(n, False) for n in tier1)
+        for name in group:
+            tier = tiers.get(name, 0)
+            flags[name] = {
+                "can_open": open_margins.get(name, False) and (tier == 0 or tier0_saturated_open),
+                "can_close": close_margins.get(name, False) and (tier == 1 or tier1_saturated_close),
+            }
+    return flags
+
+
 # ---------------------------------------------------------------------------
 # Stratégies
 # ---------------------------------------------------------------------------
