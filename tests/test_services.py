@@ -333,6 +333,33 @@ class TestHandleSetAutoControl:
         assert hass.services.async_call.call_args[1]["context"] is ctx
 
 
+class TestHandleRefresh:
+    @pytest.mark.asyncio
+    async def test_refreshes_all_coordinators(self):
+        hass = _make_hass()
+        co1 = MagicMock()
+        co1.async_refresh = AsyncMock()
+        co2 = MagicMock()
+        co2.async_refresh = AsyncMock()
+        hass.data = {svc.DOMAIN: {"entry1": co1, "entry2": co2}}
+
+        call = MagicMock()
+        call.data = {}
+        await svc._handle_refresh(hass, call)
+
+        co1.async_refresh.assert_awaited_once()
+        co2.async_refresh.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_no_entries_noop(self):
+        hass = _make_hass()
+        hass.data = {}
+
+        call = MagicMock()
+        call.data = {}
+        await svc._handle_refresh(hass, call)
+
+
 class TestRegisterServices:
     def test_registers_when_not_present(self):
         hass = _make_hass()
@@ -340,10 +367,10 @@ class TestRegisterServices:
 
         svc.async_register_services(hass)
 
-        hass.services.async_register.assert_called_once()
-        call_args = hass.services.async_register.call_args[0]
-        assert call_args[0] == "sunny"
-        assert call_args[1] == "set_auto_control"
+        registered = [c[0][:2] for c in hass.services.async_register.call_args_list]
+        assert ("sunny", "set_auto_control") in registered
+        assert ("sunny", "refresh") in registered
+        assert len(registered) == 2
 
     def test_skips_when_already_registered(self):
         hass = _make_hass()

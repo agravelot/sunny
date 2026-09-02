@@ -120,12 +120,6 @@
           "weather_entity": "Entité météo (optionnelle)"
         }
       },
-      "refresh": {
-        "title": "Fréquence de rafraîchissement",
-        "data": {
-          "refresh_interval": "Intervalle de rafraîchissement (minutes)"
-        }
-      },
       "position_threshold": {
         "title": "Seuil de tolérance de position",
         "data": {
@@ -181,7 +175,6 @@
         "delete": "Supprimer",
         "add": "Ajouter une fenêtre",
         "weather": "Changer l'entité météo",
-        "refresh": "Modifier la fréquence de rafraîchissement",
         "position_threshold": "Changer le seuil de position",
         "stagger": "Configurer l'échelonnement des stores",
         "obstacles": "Gérer les obstacles",

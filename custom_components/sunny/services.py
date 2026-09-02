@@ -1,5 +1,6 @@
 """Services pour l'intégration Sunny."""
 
+import asyncio
 import logging
 
 import voluptuous as vol
@@ -12,6 +13,9 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_AUTO_CONTROL = "set_auto_control"
+SERVICE_REFRESH = "refresh"
+
+REFRESH_SCHEMA = vol.Schema({})
 
 SCHEMA = vol.Schema(
     {
@@ -70,6 +74,14 @@ async def _handle_set_auto_control(hass: HomeAssistant, call: ServiceCall) -> No
     )
 
 
+async def _handle_refresh(hass: HomeAssistant, call: ServiceCall) -> None:
+    coordinators = list(hass.data.get(DOMAIN, {}).values())
+    if not coordinators:
+        _LOGGER.warning("Aucune entry Sunny chargée, refresh ignoré")
+        return
+    await asyncio.gather(*(co.async_refresh() for co in coordinators))
+
+
 def async_register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_SET_AUTO_CONTROL):
         return
@@ -82,4 +94,11 @@ def async_register_services(hass: HomeAssistant) -> None:
         SERVICE_SET_AUTO_CONTROL,
         _handle,
         schema=SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REFRESH,
+        _handle_refresh,
+        schema=REFRESH_SCHEMA,
     )

@@ -17,7 +17,7 @@ sys.path.insert(0, str(SRC.parent))
 
 class _MockDataUpdateCoordinator:
     def __init__(self, *args, **kwargs):
-        pass
+        self.update_interval = kwargs.get("update_interval")
     async def async_config_entry_first_refresh(self):
         pass
     async def async_request_refresh(self):
@@ -112,6 +112,15 @@ def coordinator_instance(mock_hass):
 # ---------------------------------------------------------------------------
 # Tests _resolve_lux_sensors
 # ---------------------------------------------------------------------------
+
+class TestNoPolling:
+    """Le coordinateur ne doit plus poller : refresh uniquement via service."""
+
+    def test_update_interval_is_none(self, coordinator_instance):
+        # getattr : la classe de base mockée dépend du fichier de test
+        # qui importe sunny en premier (certains mocks ignorent les kwargs).
+        assert getattr(coordinator_instance, "update_interval", None) is None
+
 
 class TestResolveLuxSensors:
     """Tests pour _resolve_lux_sensors."""

@@ -1,6 +1,6 @@
 """Coordinateur de données pour l'intégration Sunny."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import logging
 
 from homeassistant.core import HomeAssistant
@@ -11,7 +11,6 @@ from homeassistant.helpers import device_registry as dr
 
 from .const import (
     DOMAIN,
-    DEFAULT_REFRESH_INTERVAL,
     DEFAULT_RELIEF_ANGLE,
     DEFAULT_STRATEGY_HIGH,
     DEFAULT_STRATEGY_LOW,
@@ -65,15 +64,18 @@ def _merge_sensor_groups(resolved: dict[str, set[str]]) -> list[list[str]]:
 
 
 class SunnyCoordinator(DataUpdateCoordinator):
-    """Coordinateur qui recalcule l'ensoleillement périodiquement."""
+    """Coordinateur qui recalcule l'ensoleillement à la demande.
+
+    Aucun polling : le recalcul a lieu au setup puis à chaque appel du
+    service `sunny.refresh`.
+    """
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        interval = entry.options.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=interval),
+            update_interval=None,
         )
         self.entry = entry
 

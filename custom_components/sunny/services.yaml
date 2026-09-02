@@ -22,3 +22,7 @@ set_auto_control:
       selector:
         area:
           multiple: true
+
+refresh:
+  name: Rafraîchir l'ensoleillement
+  description: Recalcule l'ensoleillement de toutes les fenêtres. À utiliser dans une automation pour remplacer le rafraîchissement périodique.

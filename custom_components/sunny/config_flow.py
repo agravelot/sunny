@@ -46,7 +46,6 @@ from .const import (
     CONF_GROUND_ALTITUDE,
     CONF_ZONE_ENTITY,
     CONF_STRATEGY,
-    CONF_REFRESH_INTERVAL,
     CONF_STRATEGY_HIGH,
     CONF_STRATEGY_LOW,
     CONF_TEMP_THRESHOLD,
@@ -75,7 +74,6 @@ from .const import (
     DEFAULT_ALTITUDE,
     DEFAULT_GROUND_ALTITUDE,
     DEFAULT_STRATEGY,
-    DEFAULT_REFRESH_INTERVAL,
     DEFAULT_STRATEGY_HIGH,
     DEFAULT_STRATEGY_LOW,
     DEFAULT_TEMP_THRESHOLD,
@@ -235,7 +233,6 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self.data: dict[str, Any] = {
             CONF_WINDOWS: [],
-            CONF_REFRESH_INTERVAL: DEFAULT_REFRESH_INTERVAL,
         }
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
@@ -300,7 +297,6 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 options={
                     CONF_WEATHER_ENTITY: self.data.get(CONF_WEATHER_ENTITY, ""),
                     CONF_WINDOWS: self.data[CONF_WINDOWS],
-                    CONF_REFRESH_INTERVAL: self.data.get(CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL),
                 },
             )
 
@@ -355,8 +351,6 @@ class SunnyOptionsFlow(OptionsFlow):
                 return await self.async_step_init()
             elif action == "weather":
                 return await self.async_step_weather()
-            elif action == "refresh":
-                return await self.async_step_refresh()
             elif action == "position_threshold":
                 return await self.async_step_position_threshold()
             elif action == "stagger":
@@ -374,7 +368,7 @@ class SunnyOptionsFlow(OptionsFlow):
         options.append({"label": "+ Ajouter une fenêtre", "value": "add"})
 
         schema = vol.Schema({
-            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "refresh", "position_threshold", "stagger", "obstacles", "done"]),
+            vol.Required("action"): vol.In(["edit", "delete", "add", "weather", "position_threshold", "stagger", "obstacles", "done"]),
             vol.Optional("window"): vol.In({o["value"]: o["label"] for o in options}),
         })
 
@@ -481,20 +475,6 @@ class SunnyOptionsFlow(OptionsFlow):
                     NumberSelector(
                         NumberSelectorConfig(min=0, max=20, step=1, mode=NumberSelectorMode.BOX)
                     ),
-            }),
-        )
-
-    async def async_step_refresh(self, user_input: dict[str, Any] | None = None):
-        if user_input is not None:
-            self.data[CONF_REFRESH_INTERVAL] = user_input[CONF_REFRESH_INTERVAL]
-            return await self.async_step_init()
-
-        current = self.data.get(CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL)
-        return self.async_show_form(
-            step_id="refresh",
-            data_schema=vol.Schema({
-                vol.Required(CONF_REFRESH_INTERVAL, default=current):
-                    vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
             }),
         )
 
