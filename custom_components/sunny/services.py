@@ -74,7 +74,8 @@ async def _handle_set_auto_control(hass: HomeAssistant, call: ServiceCall) -> No
     )
 
 
-async def _handle_refresh(hass: HomeAssistant, call: ServiceCall) -> None:
+async def _handle_refresh(call: ServiceCall) -> None:
+    hass = call.hass
     coordinators = list(hass.data.get(DOMAIN, {}).values())
     if not coordinators:
         _LOGGER.warning("Aucune entry Sunny chargée, refresh ignoré")

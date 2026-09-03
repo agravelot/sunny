@@ -345,7 +345,8 @@ class TestHandleRefresh:
 
         call = MagicMock()
         call.data = {}
-        await svc._handle_refresh(hass, call)
+        call.hass = hass
+        await svc._handle_refresh(call)
 
         co1.async_refresh.assert_awaited_once()
         co2.async_refresh.assert_awaited_once()
@@ -357,7 +358,8 @@ class TestHandleRefresh:
 
         call = MagicMock()
         call.data = {}
-        await svc._handle_refresh(hass, call)
+        call.hass = hass
+        await svc._handle_refresh(call)
 
 
 class TestRegisterServices:
@@ -371,6 +373,30 @@ class TestRegisterServices:
         assert ("sunny", "set_auto_control") in registered
         assert ("sunny", "refresh") in registered
         assert len(registered) == 2
+
+    @pytest.mark.asyncio
+    async def test_refresh_handler_called_with_call_only(self):
+        """Régression : HA appelle le handler avec ServiceCall seul, pas (hass, call)."""
+        hass = _make_hass()
+        hass.services.has_service.return_value = False
+        co = MagicMock()
+        co.async_refresh = AsyncMock()
+        hass.data = {svc.DOMAIN: {"entry1": co}}
+
+        svc.async_register_services(hass)
+
+        handlers = [
+            c[0][2] for c in hass.services.async_register.call_args_list
+            if c[0][1] == "refresh"
+        ]
+        assert len(handlers) == 1
+
+        call = MagicMock()
+        call.data = {}
+        call.hass = hass
+        await handlers[0](call)
+
+        co.async_refresh.assert_awaited_once()
 
     def test_skips_when_already_registered(self):
         hass = _make_hass()
