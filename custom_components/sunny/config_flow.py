@@ -94,15 +94,25 @@ def _get_cover_friendly_name(hass: HomeAssistant, cover_entity_id: str) -> str:
     return DEFAULT_NAME
 
 
+def _normalize_window_name(name: str) -> str:
+    """Normalise un nom de fenêtre pour la comparaison (casse, espaces).
+
+    Deux noms qui ne diffèrent que par la casse ou les espaces produiraient
+    des entrées coordinator en collision (clés dupliquées).
+    """
+    return str(name).strip().casefold()
+
+
 def _is_window_name_duplicate(
     windows: list[dict[str, Any]],
     name: str,
     exclude_idx: int | None = None,
 ) -> bool:
+    target = _normalize_window_name(name)
     for i, win in enumerate(windows):
         if exclude_idx is not None and i == exclude_idx:
             continue
-        if win.get(CONF_WINDOW_NAME) == name:
+        if _normalize_window_name(win.get(CONF_WINDOW_NAME, "")) == target:
             return True
     return False
 

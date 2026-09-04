@@ -38,6 +38,16 @@ from .strategies import compute_glare_flags, get_strategy
 _LOGGER = logging.getLogger(__name__)
 
 
+def _window_key(win: dict, idx: int = 0) -> str:
+    """Clé stable d'une fenêtre : id → cover_entity → index.
+
+    Le nom de fenêtre n'est PAS une clé fiable : deux fenêtres peuvent
+    porter le même nom (config antérieure à la validation) et leurs
+    entrées s'écraseraient mutuellement.
+    """
+    return win.get("id") or win.get("cover_entity") or f"fenetre_{idx}"
+
+
 def _merge_sensor_groups(resolved: dict[str, set[str]]) -> list[list[str]]:
     """Fusionne les fenêtres partageant au moins un capteur lux résolu.
 
@@ -117,7 +127,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 sensors.append(entity.entity_id)
         return sensors
 
-    def _previous_desired(self, name: str) -> int | None:
+    def _previous_desired(self, win_key: str) -> int | None:
         """Position désirée calculée au rafraîchissement précédent.
 
         Sert de référence stable quand la position courante du volet n'est
@@ -126,12 +136,12 @@ class SunnyCoordinator(DataUpdateCoordinator):
         data = getattr(self, "data", None)
         if not data:
             return None
-        window_data = data.get(name)
+        window_data = data.get(win_key)
         if not window_data:
             return None
         return window_data.get("desired_position")
 
-    def _resolve_lux_context(self, win: dict) -> dict:
+    def _resolve_lux_context(self, win: dict, win_key: str) -> dict:
         """Résout le contexte lux d'une fenêtre.
 
         Retourne un dict avec :
@@ -156,7 +166,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                     pass
             cover_last_changed = cover_state.last_changed
 
-        previous_desired = self._previous_desired(name)
+        previous_desired = self._previous_desired(win_key)
         fallback = previous_desired if previous_desired is not None else current_position
 
         # Volet en mouvement : la position instantanée ne correspondra pas à
@@ -237,12 +247,12 @@ class SunnyCoordinator(DataUpdateCoordinator):
             "sensors": set(sensor_ids),
         }
 
-    def _compute_lux_target_position(self, win: dict, strategy) -> int:
+    def _compute_lux_target_position(self, win: dict, strategy, win_key: str) -> int:
         """Calcule la position pour une fenêtre en stratégie lux_target.
 
         Retourne la position inchangée si aucun capteur frais.
         """
-        ctx = self._resolve_lux_context(win)
+        ctx = self._resolve_lux_context(win, win_key)
         lux = ctx["lux"]
         if lux is None:
             return ctx["fallback"]
@@ -269,34 +279,37 @@ class SunnyCoordinator(DataUpdateCoordinator):
         applique la priorité anti-éblouissement : ouverture des fenêtres sans
         soleil direct en premier, fermeture des fenêtres ensoleillées en
         premier. Les fenêtres d'exposition similaire bougent ensemble.
+
+        lux_ctx et results sont indexés par la clé stable de fenêtre
+        (_window_key), pas par son nom.
         """
         strategy = get_strategy("lux_target_glare")
-        wins_by_name = {w.get("name", "Fenêtre"): w for w in windows}
-        resolved = {name: ctx["sensors"] for name, ctx in lux_ctx.items()}
+        wins_by_key = {_window_key(w, i): w for i, w in enumerate(windows)}
+        resolved = {key: ctx["sensors"] for key, ctx in lux_ctx.items()}
         groups = _merge_sensor_groups(resolved)
 
         tiers = {
-            name: (0 if results[name].get("lit_pct", 0) == 0 else 1)
-            for name in lux_ctx
+            key: (0 if results[key].get("lit_pct", 0) == 0 else 1)
+            for key in lux_ctx
         }
         open_margins: dict[str, bool] = {}
         close_margins: dict[str, bool] = {}
         bounds: dict[str, tuple[int, int]] = {}
-        for name in lux_ctx:
-            win = wins_by_name.get(name, {})
+        for key in lux_ctx:
+            win = wins_by_key.get(key, {})
             min_pos = int(win.get(CONF_MIN_POSITION, DEFAULT_MIN_POSITION))
             max_pos = int(win.get(CONF_MAX_POSITION, DEFAULT_MAX_POSITION))
-            bounds[name] = (min_pos, max_pos)
-            prev = self._previous_desired(name)
+            bounds[key] = (min_pos, max_pos)
+            prev = self._previous_desired(key)
             # Premier cycle sans historique : marge considérée disponible
-            open_margins[name] = True if prev is None else prev < max_pos
-            close_margins[name] = True if prev is None else prev > min_pos
+            open_margins[key] = True if prev is None else prev < max_pos
+            close_margins[key] = True if prev is None else prev > min_pos
 
         flags = compute_glare_flags(groups, tiers, open_margins, close_margins)
 
-        for name, ctx in lux_ctx.items():
-            win = wins_by_name.get(name, {})
-            min_pos, max_pos = bounds[name]
+        for key, ctx in lux_ctx.items():
+            win = wins_by_key.get(key, {})
+            min_pos, max_pos = bounds[key]
             lux = ctx["lux"]
             if lux is None:
                 new_position = ctx["fallback"]
@@ -307,22 +320,22 @@ class SunnyCoordinator(DataUpdateCoordinator):
                     "lux_high": win.get(CONF_LUX_HIGH, DEFAULT_LUX_HIGH),
                     "lux_low": win.get(CONF_LUX_LOW, DEFAULT_LUX_LOW),
                     "lux_step": win.get(CONF_LUX_STEP, DEFAULT_LUX_STEP),
-                    "can_open": flags[name]["can_open"],
-                    "can_close": flags[name]["can_close"],
+                    "can_open": flags[key]["can_open"],
+                    "can_close": flags[key]["can_close"],
                 }
                 new_position = strategy.compute_position(data)
                 _LOGGER.debug(
                     "Lux glare '%s': lux=%.0f lx, tier=%d, can_open=%s, can_close=%s",
-                    name, lux, tiers[name], flags[name]["can_open"], flags[name]["can_close"],
+                    win.get("name", key), lux, tiers[key], flags[key]["can_open"], flags[key]["can_close"],
                 )
-            results[name]["desired_position"] = max(min_pos, min(max_pos, new_position))
-            if results[name]["desired_position"] != ctx["current_position"]:
+            results[key]["desired_position"] = max(min_pos, min(max_pos, new_position))
+            if results[key]["desired_position"] != ctx["current_position"]:
                 _LOGGER.info(
                     "Lux glare '%s': lux=%s, position %d → %d",
-                    name,
+                    win.get("name", key),
                     f"{lux:.0f} lx" if lux is not None else "n/a",
                     ctx["current_position"],
-                    results[name]["desired_position"],
+                    results[key]["desired_position"],
                 )
 
     async def _async_update_data(self) -> dict:
@@ -356,6 +369,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
         windows = self.entry.options.get("windows", [])
         for idx, win in enumerate(windows):
             name = win.get("name", "Fenêtre")
+            win_id = _window_key(win, idx)
             lat = win.get("latitude", self.hass.config.latitude)
             lon = win.get("longitude", self.hass.config.longitude)
             zone_entity = win.get("zone_entity")
@@ -390,6 +404,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 )
                 continue
             data["cover_entity"] = win.get("cover_entity")
+            data["name"] = name
             data["zone_entity"] = win.get("zone_entity")
             data["tilt_threshold"] = win.get("tilt_threshold", 5.0)
             data["slat_transmission"] = win.get("slat_transmission", 5.0)
@@ -403,9 +418,9 @@ class SunnyCoordinator(DataUpdateCoordinator):
             data["strategy"] = strategy_name
             if strategy_name == "lux_target_glare":
                 # Passe 2 : arbitrage par groupe de capteurs partagés
-                lux_ctx[name] = self._resolve_lux_context(win)
+                lux_ctx[win_id] = self._resolve_lux_context(win, win_id)
             elif strategy_name == "lux_target":
-                data["desired_position"] = self._compute_lux_target_position(win, strategy)
+                data["desired_position"] = self._compute_lux_target_position(win, strategy, win_id)
             else:
                 data["desired_position"] = strategy.compute_position(data)
             if strategy_name != "lux_target_glare":
@@ -418,7 +433,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
             data["latitude"] = lat
             data["longitude"] = lon
             data["window_idx"] = idx
-            results[name] = data
+            results[win_id] = data
 
         if lux_ctx:
             self._apply_lux_glare(lux_ctx, results, windows)

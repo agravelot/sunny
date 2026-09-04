@@ -67,6 +67,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         super().__init__(coordinator)
         self._window_name = window_name
         self._window_idx = window_idx
+        self._window_id = window_id
         self._cover_entity_id = cover_entity_id
         self._attr_unique_id = (
             f"{coordinator.entry.entry_id}_{window_id}_{window_name}_auto_control"
@@ -116,7 +117,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        data = self.coordinator.data.get(self._window_name)
+        data = self.coordinator.data.get(self._window_id)
         if data is None:
             return
 
@@ -172,7 +173,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
             self._command_expires_at = 0
             self._last_command_target = None
 
-        data = self.coordinator.data.get(self._window_name)
+        data = self.coordinator.data.get(self._window_id)
         if data is None:
             return
         desired = data.get("desired_position")
@@ -310,7 +311,7 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         self._attr_is_on = True
-        data = self.coordinator.data.get(self._window_name)
+        data = self.coordinator.data.get(self._window_id)
         if data:
             desired_position = data.get("desired_position")
             cover_entity = data.get("cover_entity")

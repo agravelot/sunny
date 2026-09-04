@@ -79,6 +79,7 @@ class SunnyStrategySelect(CoordinatorEntity, SelectEntity):
         super().__init__(coordinator)
         self._window_name = window_name
         self._window_idx = window_idx
+        self._window_id = window_id
         self._attr_unique_id = (
             f"{coordinator.entry.entry_id}_{window_id}_{window_name}_strategy_select"
         )
@@ -91,7 +92,7 @@ class SunnyStrategySelect(CoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        data = self.coordinator.data.get(self._window_name)
+        data = self.coordinator.data.get(self._window_id)
         if data is None:
             return None
         return data.get("strategy")

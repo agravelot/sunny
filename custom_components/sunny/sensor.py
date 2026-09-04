@@ -189,7 +189,7 @@ class SunnySunSensor(SunnyBaseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        data = self.coordinator.data.get(self._window_name)
+        data = self.coordinator.data.get(self._window_id)
         if data is None:
             return
 
@@ -230,7 +230,7 @@ class SunnyPositionSensor(SunnyBaseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        data = self.coordinator.data.get(self._window_name)
+        data = self.coordinator.data.get(self._window_id)
         if data is None:
             return
 
@@ -260,7 +260,7 @@ class SunnyStrategySensor(SunnyBaseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        data = self.coordinator.data.get(self._window_name)
+        data = self.coordinator.data.get(self._window_id)
         if data is None:
             return
 
@@ -289,7 +289,7 @@ class SunnyCloudSensor(SunnyBaseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        data = self.coordinator.data.get(self._window_name)
+        data = self.coordinator.data.get(self._window_id)
         if data is None:
             return
 
