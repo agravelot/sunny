@@ -4,12 +4,24 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
 from .coordinator import SunnyCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "select", "switch", "number", "button"]
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Autorise la suppression des devices Sunny dépourvus d'entités (orphelins)."""
+    ent_reg = er.async_get(hass)
+    return not er.async_entries_for_device(
+        ent_reg, device_entry.id, include_disabled_entities=True
+    )
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
