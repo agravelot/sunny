@@ -346,7 +346,7 @@ class TestComputeLuxTargetStale:
             mock_dt.now.return_value = self.NOW
             mock_dt.timezone = timezone
             mock_dt.timedelta = timedelta
-            result = coordinator_instance._compute_lux_target_position(win, strategy)
+            result = coordinator_instance._compute_lux_target_position(win, strategy, "cover.test")
         assert result == 41  # lux=0 < 3000 → ouvert: 31 + 10 = 41
 
     def test_sensor_stale_when_cover_moved_under_60s_ago(self, coordinator_instance, mock_hass):
@@ -376,7 +376,7 @@ class TestComputeLuxTargetStale:
             mock_dt.now.return_value = self.NOW
             mock_dt.timezone = timezone
             mock_dt.timedelta = timedelta
-            result = coordinator_instance._compute_lux_target_position(win, strategy)
+            result = coordinator_instance._compute_lux_target_position(win, strategy, "cover.test")
 
         assert result == 31  # stale → position inchangée
 
@@ -407,7 +407,7 @@ class TestComputeLuxTargetStale:
             mock_dt.now.return_value = self.NOW
             mock_dt.timezone = timezone
             mock_dt.timedelta = timedelta
-            result = coordinator_instance._compute_lux_target_position(win, strategy)
+            result = coordinator_instance._compute_lux_target_position(win, strategy, "cover.test")
 
         assert result == 41  # 60s exact → pas stale → ouvert: 31 + 10 = 41
 
@@ -430,6 +430,7 @@ class TestComputeLuxTargetPreviousDesired:
     def _win(self, sensors):
         return {
             "name": "Salon",
+            "id": "Salon",
             "cover_entity": "cover.test",
             "lux_sensors": sensors,
             "lux_high": 5000,
@@ -459,7 +460,7 @@ class TestComputeLuxTargetPreviousDesired:
             mock_dt.now.return_value = self.NOW
             mock_dt.timezone = timezone
             mock_dt.timedelta = timedelta
-            return coordinator_instance._compute_lux_target_position(win, strategy)
+            return coordinator_instance._compute_lux_target_position(win, strategy, "Salon")
 
     def test_stale_returns_previous_desired(self, coordinator_instance, mock_hass):
         cover_last_changed = self.NOW - timedelta(seconds=30)
@@ -564,7 +565,7 @@ class TestResolveLuxContext:
             mock_dt.now.return_value = self.NOW
             mock_dt.timezone = timezone
             mock_dt.timedelta = timedelta
-            return coordinator_instance._resolve_lux_context(win)
+            return coordinator_instance._resolve_lux_context(win, "Salon")
 
     def test_fresh_lux_with_sensors(self, coordinator_instance, mock_hass):
         self._states(mock_hass, cover_position=50, sensor_lux="4000")
@@ -592,8 +593,8 @@ class TestResolveLuxContext:
             "cover.test": cover_state, "sensor.lux_salon": sensor_state,
         }.get(eid)
         coordinator_instance.data = {"Salon": {"desired_position": 90}}
-        win = {"name": "Salon", "cover_entity": "cover.test",
-               "lux_sensors": ["sensor.lux_salon"]}
+        win = {"name": "Salon", "id": "Salon", "cover_entity": "cover.test",
+                "lux_sensors": ["sensor.lux_salon"]}
         ctx = self._compute(coordinator_instance, win)
         assert ctx["lux"] is None
         assert ctx["fallback"] == 90
@@ -616,11 +617,11 @@ class TestApplyLuxGlare:
 
     def _windows(self):
         return [
-            {"name": "Grand", "cover_entity": "cover.grand",
+            {"name": "Grand", "id": "Grand", "cover_entity": "cover.grand",
              "strategy": "lux_target_glare", "lux_sensors": ["sensor.salon_lux"]},
-            {"name": "Petit salon", "cover_entity": "cover.petit",
+            {"name": "Petit salon", "id": "Petit salon", "cover_entity": "cover.petit",
              "strategy": "lux_target_glare", "lux_area_id": "salon"},
-            {"name": "Cuisine", "cover_entity": "cover.cuisine",
+            {"name": "Cuisine", "id": "Cuisine", "cover_entity": "cover.cuisine",
              "strategy": "lux_target_glare", "lux_sensors": ["sensor.salon_lux"]},
         ]
 
@@ -708,7 +709,7 @@ class TestApplyLuxGlare:
                        "sensors": set()},
         }
         results = {"Isolée": {"lit_pct": 0.0, "strategy": "lux_target_glare"}}
-        windows = [{"name": "Isolée", "cover_entity": "cover.x",
+        windows = [{"name": "Isolée", "id": "Isolée", "cover_entity": "cover.x",
                     "strategy": "lux_target_glare", "lux_sensors": []}]
         coordinator_instance._apply_lux_glare(ctx, results, windows)
         assert results["Isolée"]["desired_position"] == 42
@@ -723,6 +724,79 @@ class TestApplyLuxGlare:
         results = self._results()
         coordinator_instance._apply_lux_glare(ctx, results, windows)
         assert results["Grand"]["desired_position"] == 55
+
+
+# ---------------------------------------------------------------------------
+# Régression : noms de fenêtres en doublon
+# ---------------------------------------------------------------------------
+
+class TestDuplicateWindowNames:
+    """Deux fenêtres du même nom doivent coexister dans coordinator.data.
+
+    La clé doit être l'id stable de la fenêtre (id → cover_entity), pas le
+    nom : sinon une fenêtre écrase l'autre et le switch pilote le mauvais
+    volet (bug « set_auto_control ne met pas tous les volets en auto »).
+    """
+
+    async def test_duplicate_names_both_present(self, mock_hass):
+        entry = MagicMock()
+        entry.entry_id = "test_entry"
+        entry.data = {}
+        entry.options = {"windows": [
+            {"name": "salon", "cover_entity": "cover.grand",
+             "strategy": "block_all", "orientation": 180},
+            {"name": "salon", "cover_entity": "cover.petit",
+             "strategy": "block_all", "orientation": 180},
+        ]}
+
+        coord = coordinator_module.SunnyCoordinator(mock_hass, entry)
+        coord.hass = mock_hass
+        coord.data = {}
+        mock_hass.config.latitude = 45.0
+        mock_hass.config.longitude = 5.0
+
+        old = datetime.now(timezone.utc) - timedelta(hours=2)
+        sun_state = _make_mock_state(
+            "above_horizon", old, old, {"elevation": 45.0, "azimuth": 180.0},
+        )
+        mock_hass.states.get.side_effect = lambda eid: {
+            "sun.sun": sun_state,
+        }.get(eid)
+
+        results = await coord._async_update_data()
+
+        assert set(results) == {"cover.grand", "cover.petit"}
+        assert results["cover.grand"]["cover_entity"] == "cover.grand"
+        assert results["cover.petit"]["cover_entity"] == "cover.petit"
+        assert results["cover.grand"]["name"] == "salon"
+        assert results["cover.petit"]["name"] == "salon"
+
+    async def test_explicit_id_takes_priority(self, mock_hass):
+        entry = MagicMock()
+        entry.entry_id = "test_entry"
+        entry.data = {}
+        entry.options = {"windows": [
+            {"name": "salon", "id": "win_salon", "cover_entity": "cover.salon",
+             "strategy": "block_all", "orientation": 180},
+        ]}
+
+        coord = coordinator_module.SunnyCoordinator(mock_hass, entry)
+        coord.hass = mock_hass
+        coord.data = {}
+        mock_hass.config.latitude = 45.0
+        mock_hass.config.longitude = 5.0
+
+        old = datetime.now(timezone.utc) - timedelta(hours=2)
+        sun_state = _make_mock_state(
+            "above_horizon", old, old, {"elevation": 45.0, "azimuth": 180.0},
+        )
+        mock_hass.states.get.side_effect = lambda eid: {
+            "sun.sun": sun_state,
+        }.get(eid)
+
+        results = await coord._async_update_data()
+
+        assert set(results) == {"win_salon"}
 
 
 # ---------------------------------------------------------------------------
@@ -777,9 +851,10 @@ class TestAsyncUpdateDataGlare:
 
         results = await coord._async_update_data()
 
-        assert "Glare" in results
+        # Sans champ "id", la clé retombe sur cover_entity
+        assert "cover.glare" in results
         # Soleil plein sud + lux 9000 > haut → fermeture : 100 - 10 = 90,
         # clamp max_position=80 en passe 2 → 80.
-        assert results["Glare"]["desired_position"] == 80
-        assert "Control" in results
-        assert "desired_position" in results["Control"]
+        assert results["cover.glare"]["desired_position"] == 80
+        assert "cover.control" in results
+        assert "desired_position" in results["cover.control"]

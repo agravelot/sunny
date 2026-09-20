@@ -174,6 +174,9 @@ class TestHandleSetAutoControl:
     @pytest.mark.asyncio
     async def test_specific_entities(self):
         hass = _make_hass()
+        reg = _mock_ent_reg(_entry("switch.grand_pilotage_auto"))
+        reg.async_get.side_effect = lambda eid: reg.entities.get(eid)
+        ha_entity_registry.async_get = MagicMock(return_value=reg)
 
         call = MagicMock()
         call.data = {
@@ -219,6 +222,9 @@ class TestHandleSetAutoControl:
     @pytest.mark.asyncio
     async def test_entity_and_area_union(self):
         hass = _make_hass()
+        reg = _mock_ent_reg(_entry("switch.petit_pilotage_auto"))
+        reg.async_get.side_effect = lambda eid: reg.entities.get(eid)
+        ha_entity_registry.async_get = MagicMock(return_value=reg)
         ha_area_registry.async_get = MagicMock(
             return_value=_mock_area_reg(_MockAreaEntry("uuid_salon", "salon"))
         )
@@ -331,6 +337,75 @@ class TestHandleSetAutoControl:
 
         hass.services.async_call.assert_called_once()
         assert hass.services.async_call.call_args[1]["context"] is ctx
+
+
+# ---------------------------------------------------------------------------
+# Tests filtrage des entity_id fournis explicitement
+# ---------------------------------------------------------------------------
+
+class TestFilterProvidedEntityIds:
+    """Régression : les entity_id fournis doivent être filtrés sur les
+    switches Sunny du registre, avec un warning pour les ignorés (sinon
+    les cibles obsolètes disparaissent en silence)."""
+
+    def _registry(self, *entries):
+        reg = _mock_ent_reg(*entries)
+        reg.async_get.side_effect = lambda eid: reg.entities.get(eid)
+        return reg
+
+    @pytest.mark.asyncio
+    async def test_foreign_and_unknown_entities_filtered(self):
+        hass = _make_hass()
+        ha_entity_registry.async_get = MagicMock(return_value=self._registry(
+            _entry("switch.sunny_a"),
+            _entry("switch.other", "switch", "other_integration"),
+            _entry("cover.volet", "cover"),
+        ))
+
+        call = MagicMock()
+        call.data = {
+            "enabled": True,
+            "entity_id": ["switch.sunny_a", "switch.other", "switch.ghost"],
+        }
+        call.context = None
+        await svc._handle_set_auto_control(hass, call)
+
+        args = hass.services.async_call.call_args
+        assert set(args[0][2]["entity_id"]) == {"switch.sunny_a"}
+
+    @pytest.mark.asyncio
+    async def test_no_valid_target_no_fallback_to_all(self):
+        """Des cibles explicites toutes invalides ne doivent PAS retomber
+        sur « tous les switches » : avertissement et no-op."""
+        hass = _make_hass()
+        ha_entity_registry.async_get = MagicMock(return_value=self._registry(
+            _entry("switch.sunny_a"),
+        ))
+
+        call = MagicMock()
+        call.data = {"enabled": True, "entity_id": ["switch.ghost"]}
+        call.context = None
+        await svc._handle_set_auto_control(hass, call)
+
+        hass.services.async_call.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_valid_explicit_target_forwarded(self):
+        hass = _make_hass()
+        ha_entity_registry.async_get = MagicMock(return_value=self._registry(
+            _entry("switch.sunny_a"),
+        ))
+
+        call = MagicMock()
+        call.data = {"enabled": True, "entity_id": ["switch.sunny_a"]}
+        call.context = None
+        await svc._handle_set_auto_control(hass, call)
+
+        hass.services.async_call.assert_called_once_with(
+            "switch", "turn_on",
+            {"entity_id": ["switch.sunny_a"]},
+            context=None,
+        )
 
 
 class TestHandleRefresh:
