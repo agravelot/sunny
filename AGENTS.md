@@ -52,6 +52,10 @@ custom_components/sunny/
 
 **Never use a positional index in a unique_id.** If a window is removed, indices shift and remaining entities get desynchronized.
 
+## Manual-intervention detection
+
+The auto-control switch must only turn itself off on a real manual intervention. Some covers (e.g. MQTT/Zigbee2MQTT) publish `current_position` = the **commanded target** immediately, before the cover physically moves. The switch therefore records the position at command time and only accepts arrival after observing actual travel, instead of treating that optimistic sample as arrival or as a manual move. Regression tests: `TestOptimisticTargetReport` in `tests/test_switch.py`.
+
 ## Geographic position
 
 The `latitude`/`longitude` fields do **not** exist in window config. The coordinator resolves them dynamically:

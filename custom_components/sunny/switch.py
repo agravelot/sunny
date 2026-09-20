@@ -79,6 +79,8 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._command_threshold: int = DEFAULT_POSITION_THRESHOLD
         self._command_expires_at: float = 0
         self._last_command_target: int | None = None
+        self._command_start_position: int | None = None
+        self._command_moved: bool = False
 
     def _set_command_target(self, position: int, threshold: int) -> None:
         """Enregistre la cible suivie par le pilotage auto avec une échéance."""
@@ -89,6 +91,11 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
                 "command_timeout", DEFAULT_COMMAND_TIMEOUT
             )
         )
+        state = self.hass.states.get(self._cover_entity_id)
+        self._command_start_position = (
+            self._resolve_position(state) if state is not None else None
+        )
+        self._command_moved = False
 
     def _release_command(self) -> None:
         """Termine une commande auto arrivée à destination.
@@ -102,6 +109,8 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
             self._last_command_target = self._command_target
         self._command_target = None
         self._command_expires_at = 0
+        self._command_start_position = None
+        self._command_moved = False
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -164,14 +173,25 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         # sauf en cas d'intervention manuelle.
         if self._command_target is not None:
             if abs(new_position - self._command_target) <= self._command_threshold:
-                self._release_command()
+                # Une intégration peut publier la position CIBLE dès la commande,
+                # avant tout déplacement (MQTT/Zigbee2MQTT). N'accepter l'arrivée
+                # qu'après un vrai mouvement, sinon le premier événement physique
+                # serait pris pour une intervention manuelle.
+                if self._command_moved or self._command_start_position is None:
+                    self._release_command()
                 return
+            was_moved = self._command_moved
+            self._command_moved = True
             old_state = event.data.get("old_state")
-            if not self._manual_intervention(old_state, new_state, new_position):
+            if not self._manual_intervention(
+                old_state, new_state, new_position, was_moved
+            ):
                 return
             self._command_target = None
             self._command_expires_at = 0
             self._last_command_target = None
+            self._command_start_position = None
+            self._command_moved = False
 
         data = self.coordinator.data.get(self._window_id)
         if data is None:
@@ -267,7 +287,9 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
             return False
         return True
 
-    def _manual_intervention(self, old_state, new_state, new_position: int) -> bool:
+    def _manual_intervention(
+        self, old_state, new_state, new_position: int, was_moved: bool = True
+    ) -> bool:
         """True si le mouvement du cover ne vient pas du pilotage auto.
 
         Signaux : éloignement de la cible, commande expirée, ou arrivée à
@@ -279,6 +301,14 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
             return True
         old_position = self._resolve_position(old_state) if old_state is not None else None
         if old_position is None:
+            return False
+        # Position précédente déjà sur la cible sans mouvement observé depuis la
+        # commande : cible publiée en avance (optimiste), pas une preuve.
+        if (
+            abs(old_position - target) <= tolerance
+            and self._command_start_position is not None
+            and not was_moved
+        ):
             return False
         if abs(new_position - target) > abs(old_position - target) + tolerance:
             return True
@@ -304,6 +334,8 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._command_target = None
         self._command_expires_at = 0
         self._last_command_target = None
+        self._command_start_position = None
+        self._command_moved = False
         _LOGGER.info(
             "Pilotage auto désactivé pour %s (intervention manuelle détectée)",
             self._window_name,
@@ -329,4 +361,6 @@ class SunnyAutoControlSwitch(CoordinatorEntity, SwitchEntity, RestoreEntity):
         self._command_target = None
         self._command_expires_at = 0
         self._last_command_target = None
+        self._command_start_position = None
+        self._command_moved = False
         self.async_write_ha_state()

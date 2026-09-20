@@ -163,7 +163,7 @@ def mock_coordinator(mock_hass):
     coord.hass = mock_hass
     coord.stagger_delay = 1
     coord.data = {
-        "Test": {
+        "test_id": {
             "desired_position": 50,
             "cover_entity": "cover.test_shutter",
         },
@@ -244,7 +244,7 @@ class TestSunnyAutoControlSwitch:
 
     @pytest.mark.asyncio
     async def test_turn_on_no_cover_entity(self, switch_instance, mock_coordinator, mock_hass):
-        mock_coordinator.data["Test"]["cover_entity"] = None
+        mock_coordinator.data["test_id"]["cover_entity"] = None
         mock_hass.services.async_call.reset_mock()
         await switch_instance.async_turn_on()
         mock_hass.services.async_call.assert_not_called()
@@ -295,14 +295,14 @@ class TestSunnyAutoControlSwitch:
     def test_no_desired_position_does_nothing(self, switch_instance, mock_coordinator, mock_hass):
         switch_instance._attr_is_on = True
         mock_hass.async_create_task.reset_mock()
-        mock_coordinator.data["Test"]["desired_position"] = None
+        mock_coordinator.data["test_id"]["desired_position"] = None
         switch_instance._handle_coordinator_update()
         mock_hass.async_create_task.assert_not_called()
 
     def test_no_cover_entity_does_nothing(self, switch_instance, mock_coordinator, mock_hass):
         switch_instance._attr_is_on = True
         mock_hass.async_create_task.reset_mock()
-        mock_coordinator.data["Test"]["cover_entity"] = None
+        mock_coordinator.data["test_id"]["cover_entity"] = None
         switch_instance._handle_coordinator_update()
         mock_hass.async_create_task.assert_not_called()
 
@@ -359,7 +359,7 @@ class TestSunnyAutoControlSwitch:
         switch_instance._command_expires_at = time.monotonic() - 1
         switch_instance.async_write_ha_state = MagicMock()
         mock_hass.async_create_task.reset_mock()
-        mock_coordinator.data["Test"]["desired_position"] = 60
+        mock_coordinator.data["test_id"]["desired_position"] = 60
         switch_instance.hass.states.get.return_value = _mock_state("50")
 
         switch_instance._handle_coordinator_update()
@@ -467,6 +467,62 @@ class TestSunnyAutoControlSwitch:
 
 
 # ---------------------------------------------------------------------------
+# Tests WindowIdLookup
+# ---------------------------------------------------------------------------
+
+class TestWindowIdLookup:
+    """Régression : les données coordinator sont lues par window_id, pas par nom.
+
+    Deux fenêtres peuvent porter le même nom (noms créés avant la validation
+    ou ne différant que par la casse) : chaque switch doit piloter SON cover.
+    """
+
+    def _make(self, mock_hass, name, window_id, window_idx=0):
+        coord = MagicMock()
+        coord.entry = MagicMock()
+        coord.entry.entry_id = "test_entry"
+        coord.entry.options = {}
+        coord.stagger_delay = 0
+        coord.data = {
+            "cover.grand": {"desired_position": 30, "cover_entity": "cover.grand"},
+            "cover.petit": {"desired_position": 70, "cover_entity": "cover.petit"},
+        }
+        s = switch_module.SunnyAutoControlSwitch(
+            coord, name, window_idx, window_id, window_id, MagicMock(),
+        )
+        s.hass = mock_hass
+        s.async_write_ha_state = MagicMock()
+        mock_hass.services.async_call.reset_mock()
+        return s
+
+    @pytest.mark.asyncio
+    async def test_turn_on_commands_own_cover_first(self, mock_hass):
+        s = self._make(mock_hass, "salon", "cover.grand")
+        await s.async_turn_on()
+        mock_hass.services.async_call.assert_called_once_with(
+            "cover", "set_cover_position",
+            {"entity_id": "cover.grand", "position": 30},
+            blocking=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_turn_on_commands_own_cover_second(self, mock_hass):
+        s = self._make(mock_hass, "salon", "cover.petit", window_idx=1)
+        await s.async_turn_on()
+        mock_hass.services.async_call.assert_called_once_with(
+            "cover", "set_cover_position",
+            {"entity_id": "cover.petit", "position": 70},
+            blocking=True,
+        )
+
+    def test_coordinator_update_reads_by_window_id(self, mock_hass):
+        s = self._make(mock_hass, "salon", "cover.petit")
+        s._attr_is_on = True
+        s._handle_coordinator_update()
+        assert s._command_target == 70
+
+
+# ---------------------------------------------------------------------------
 # Tests ShouldApply
 # ---------------------------------------------------------------------------
 
@@ -478,7 +534,7 @@ class TestShouldApply:
         coord.entry = MagicMock()
         coord.entry.options = {}
         coord.entry.entry_id = "test_entry"
-        coord.data = {"Test": {"desired_position": 50, "cover_entity": "cover.test_shutter"}}
+        coord.data = {"test_id": {"desired_position": 50, "cover_entity": "cover.test_shutter"}}
         s = switch_module.SunnyAutoControlSwitch(
             coord, "Test", 0, "test_id", "cover.test_shutter", MagicMock(),
         )
@@ -554,7 +610,7 @@ class TestOnCoverStateChange:
         coord.entry.options = {}
         coord.entry.entry_id = "test_entry"
         coord.data = {
-            "Test": {
+            "test_id": {
                 "desired_position": desired_position,
                 "cover_entity": "cover.test_shutter",
             },
@@ -1276,3 +1332,93 @@ class TestResolvePosition:
         state = _mock_state("open")
         result = switch_module.SunnyAutoControlSwitch._resolve_position(state)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Régression : cible publiée de façon optimiste avant le mouvement
+# ---------------------------------------------------------------------------
+
+class TestOptimisticTargetReport:
+    """MQTT/Zigbee2MQTT publie current_position=cible dès la commande.
+
+    Le premier événement physique (position réelle de départ) ne doit pas
+    être pris pour une intervention manuelle.
+    """
+
+    def _make_switch(self, mock_hass, desired_position=100, threshold=8):
+        coord = MagicMock()
+        coord.entry = MagicMock()
+        coord.entry.options = {"position_threshold": threshold}
+        coord.entry.entry_id = "test_entry"
+        coord.data = {
+            "cover.volet_cuisine": {
+                "desired_position": desired_position,
+                "cover_entity": "cover.volet_cuisine",
+            },
+        }
+        s = switch_module.SunnyAutoControlSwitch(
+            coord, "Volet cuisine", 0, "cover.volet_cuisine",
+            "cover.volet_cuisine", MagicMock(),
+        )
+        s.hass = mock_hass
+        s.async_write_ha_state = MagicMock()
+        s._attr_is_on = True
+        return s
+
+    def _event(self, sv, pos, old_sv, old_pos):
+        event = MagicMock()
+        event.data = {
+            "new_state": _mock_state(sv, pos),
+            "old_state": _mock_state(old_sv, old_pos),
+        }
+        return event
+
+    def test_optimistic_target_is_not_an_arrival(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        mock_hass.states.get.return_value = _mock_state("closed", 0)
+        s._set_command_target(100, 8)
+
+        # cible publiée avant tout déplacement
+        s._on_cover_state_change(self._event("closed", 100, "closed", 0))
+        assert s._command_target == 100
+        assert s._attr_is_on is True
+
+        # premier mouvement physique
+        s._on_cover_state_change(self._event("open", 4, "closed", 100))
+        assert s._command_target == 100
+        assert s._attr_is_on is True
+
+        # arrivée réelle
+        s._on_cover_state_change(self._event("open", 100, "open", 96))
+        assert s._command_target is None
+        assert s._attr_is_on is True
+
+    def test_optimistic_target_close(self, mock_hass):
+        s = self._make_switch(mock_hass, desired_position=0)
+        mock_hass.states.get.return_value = _mock_state("open", 100)
+        s._set_command_target(0, 8)
+
+        s._on_cover_state_change(self._event("open", 0, "open", 100))
+        assert s._command_target == 0
+        assert s._attr_is_on is True
+
+        s._on_cover_state_change(self._event("open", 96, "open", 0))
+        assert s._command_target == 0
+        assert s._attr_is_on is True
+
+        s._on_cover_state_change(self._event("closed", 0, "open", 4))
+        assert s._command_target is None
+        assert s._attr_is_on is True
+
+    def test_manual_after_arrival_still_disables(self, mock_hass):
+        s = self._make_switch(mock_hass)
+        mock_hass.states.get.return_value = _mock_state("closed", 0)
+        s._set_command_target(100, 8)
+        s._on_cover_state_change(self._event("open", 4, "closed", 0))
+        s._on_cover_state_change(self._event("open", 50, "open", 46))
+        s._on_cover_state_change(self._event("open", 100, "open", 96))
+        assert s._command_target is None
+        assert s._attr_is_on is True
+
+        s._on_cover_state_change(self._event("open", 40, "open", 100))
+        assert s._attr_is_on is False
