@@ -20,7 +20,7 @@
 
 Blinds are a real trade-off: you want daylight, a view and passive solar gain in winter, yet you also want to keep the summer sun, glare and overheating out. Sunny models the actual **solar geometry** of each window: facade orientation, reveal depth, external obstructions and horizon dip. It then computes how much direct sunlight really lands on the glass and drives each cover with a per-window control strategy.
 
-It is a complete Home Assistant custom integration: a pure-Python calculation core (`solar_math.py`, no Home Assistant imports, 100% unit-tested), seven pluggable strategies, a coordinator that recomputes every window, and full UI configuration through the Config/Options flow.
+It is a complete Home Assistant custom integration: a pure-Python calculation core (`solar_math.py`, no Home Assistant imports, 100% unit-tested), twelve pluggable strategies, a coordinator that recomputes every window, and full UI configuration through the Config/Options flow.
 
 ## Features
 
@@ -28,7 +28,7 @@ It is a complete Home Assistant custom integration: a pure-Python calculation co
 - Accounts for facade orientation, wall thickness (reveal), external obstructions (screen wall) and building altitude (horizon dip)
 - Integrates weather data (cloud coverage, temperature, condition) to enrich the sensors
 - Creates 4 sensors per window (sun, desired position, active strategy, cloud coverage) + 1 strategy selector
-- 7 configurable control strategies per window
+- 12 configurable control strategies per window
 - Settings editable at any time via the Home Assistant Config Flow / Options Flow
 - Ships brand icons/logos and is HACS compatible
 - 359 unit tests, HACS and hassfest validated on every push
@@ -85,13 +85,22 @@ Copy the `custom_components/sunny` folder into Home Assistant's `custom_componen
 | Width | Window width (m) | 1.2 |
 | Height | Window height (m) | 1.4 |
 | Wall thickness | Reveal depth (m) | 0.25 |
-| Screen distance | External obstruction distance (m, 0 = disabled) | 0 |
-| Screen height | Obstruction height (m) | 1.0 |
 | Altitude | Window height above ground (m) | 10 |
 | Ground altitude | Ground / sea level altitude (m) | 208 |
+| Relief angle | Minimum solar elevation for the window to count as lit (°) | 3 |
 | Tilt threshold | Tilt vs lift threshold (%) | 5 |
 | Slat transmission | Light transmission through closed slats (%) | 5 |
-| Strategy | Control algorithm | block_all |
+| Obstacles | Rectangular boxes in front of the window, given by two corners (x1,y1,z1)-(x2,y2,z2): x left/right, y distance from the facade, z height (m) | none |
+| Strategy | Control algorithm (see below) | block_all |
+| Threshold high / low | Sunlight thresholds for `threshold` (%) | 50 / 20 |
+| Temperature threshold | Temperature trigger for `temperature_guard` (°C) | 28 |
+| Light threshold | Sunlight trigger for `temperature_guard` (%) | 20 |
+| Target illumination | Target for `target_illumination` (%) | 30 |
+| Max illumination | Cap for `max_illumination` (%) | 30 |
+| Lux sensors | Indoor illuminance sensors for the `lux_*` strategies | optional |
+| Lux area | Area whose illuminance sensors the `lux_*` strategies use | optional |
+| Lux high / low | Hysteresis thresholds for the `lux_*` strategies (lx) | 5000 / 3000 |
+| Lux step | Position step per update for the `lux_*` strategies (%) | 10 |
 | Zone entity | HA zone for geographic position | optional |
 
 4. Sensors are created automatically and update every 5 minutes (configurable).
@@ -109,9 +118,9 @@ Each window produces the following entities:
 | `{name} Stratégie` | `sensor` | Currently active strategy name |
 | `{name} Couverture nuageuse` | `sensor` | Cloud coverage (%), if weather configured |
 | `{name} Choix stratégie` | `select` | Strategy selector (change strategy from the dashboard) |
-| `{name} Position minimale` | `number` | Lower bound for the computed position |
-| `{name} Position maximale` | `number` | Upper bound for the computed position |
-| `{name} Ensoleillement maximal` | `number` | Target illumination for the lux strategy |
+| `{name} Position min` | `number` | Lower bound for the computed position |
+| `{name} Position max` | `number` | Upper bound for the computed position |
+| `{name} Ensoleillement max` | `number` | Sunlight cap for the `max_illumination` strategy |
 | `{name} Réinitialiser les bornes` | `button` | Resets min/max bounds |
 | `{name} Contrôle automatique` | `switch` | Enables automatic cover control |
 
@@ -152,13 +161,20 @@ The strategy determines how `desired_position` is computed. It is chosen per win
 
 | Strategy | Behavior |
 |----------|----------|
-| **block_all** | Closes enough to block all direct sunlight (summer / heatwave). Position = `100 × y_shadow / Hw`. |
-| **winter_passive** | Passive solar heating: open (100%) if sun on window, closed (0%) otherwise. |
-| **proportional** | `position = 100 − sunlight%`: more sun → blind goes lower. |
-| **threshold** | Closed (0%) if sunlight ≥ 50%, open (100%) if ≤ 20%. Linear interpolation between. |
-| **temperature_guard** | If temperature ≥ 28°C and sunlight ≥ 20% → applies block_all. Otherwise open (100%). |
-| **privacy_night** | Closed (0%) when sun below horizon, open (100%) during the day. |
-| **target_illumination** | Maintains exactly 30% sunlight. Uses a 5% search + binary to find the optimal blind position. |
+| **block_all** | Closes just enough to block all direct sunlight. Position = `100 × y_shadow / Hw`. |
+| **winter_passive** | Passive solar heating: open (100%) when the sun hits the window, closed (0%) otherwise. |
+| **proportional** | `position = 100 - sunlight%`, so more sun means a lower blind. |
+| **threshold** | Closed (0%) when sunlight ≥ 50%, open (100%) at ≤ 20%, linear in between. Thresholds are configurable. |
+| **temperature_guard** | Applies block_all when the outside temperature ≥ 28 °C and sunlight ≥ 20%, otherwise open (100%). |
+| **privacy_night** | Closed (0%) when the sun is below the horizon, open (100%) during the day. |
+| **target_illumination** | Finds the blind position that holds direct sunlight at a target (default 30%), using a 5% scan then a binary search. |
+| **max_illumination** | Finds the most open position whose direct sunlight stays at or below a cap (default 30%). |
+| **always_closed** | Always closed (0%). Useful for thermal insulation or long absences. |
+| **always_open** | Always open (100%). Maximum natural light. |
+| **lux_target** | Regulates from an indoor illuminance sensor: closes one step (default 10%) above the high threshold (default 5000 lx), opens one step below the low threshold (default 3000 lx), and holds inside the hysteresis band. |
+| **lux_target_glare** | The same lux regulation, coordinated across every window sharing the sensor or area: windows without direct sun open first and sunny windows close first, so glare is cut without darkening the whole room. |
+
+The **Position min** and **Position max** numbers clamp the result of any strategy. The two `lux_*` strategies need one or more illuminance sensors (optionally grouped by area) selected in the window configuration.
 
 New strategies can be added in `strategies.py`.
 

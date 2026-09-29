@@ -2,7 +2,7 @@
 
 ## Language
 
-All code, comments, documentation, and UI are in **French**. Commit messages can be in French or English.
+All code, comments, and UI strings are in **French**. Documentation (`README.md`, this file) is in **English**. Commit messages can be in French or English.
 
 ## Project purpose
 
@@ -29,8 +29,9 @@ custom_components/sunny/
   select.py         # 1 strategy selector per window
   number.py         # 3 number entities per window (min_position, max_position, max_illumination)
   button.py         # 1 button entity per window (reset_bounds)
+  switch.py         # 1 auto-control switch per window
   solar_math.py     # pure solar geometry calculations (no HA imports)
-  strategies.py     # 7 control strategies (compute_position)
+  strategies.py     # 12 control strategies + glare coordination (compute_position)
   strings.json      # UI translations
   brand/            # HA/HACS brand PNGs (icon + logo, @2x and dark variants)
 assets/
@@ -87,10 +88,10 @@ The `latitude`/`longitude` fields do **not** exist in window config. The coordin
 
 - `pytest.ini` enables `asyncio_mode = auto` for potential async tests.
 
-## Références
+## References
 
-- `git@github.com:home-assistant/core.git` (branche `dev`) — Home Assistant core. APIs, entités, config flows, helpers, loader, etc.
-- `git@github.com:home-assistant/developers.home-assistant.git` — Documentation officielle du développement HA (Docusaurus).
+- `git@github.com:home-assistant/core.git` (branch `dev`): Home Assistant core. APIs, entities, config flows, helpers, loader, etc.
+- `git@github.com:home-assistant/developers.home-assistant.git`: official Home Assistant development documentation (Docusaurus).
 
 ## Simulator
 
