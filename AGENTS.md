@@ -11,7 +11,7 @@ Home Assistant custom integration to automatically control blinds/shutters based
 ## Commands
 
 ```bash
-python3 -m pytest tests/ -v    # 319 unit tests (solar_math + strategies + coordinator + switch + number + button + services)
+python3 -m pytest tests/ -v    # 359 unit tests (solar_math + strategies + coordinator + switch + number + button + services)
 ```
 
 GitHub CI also validates HACS (`hacs/action`) and hassfest (`home-assistant/actions/hassfest`). No lint, no typecheck, no build.
@@ -27,7 +27,7 @@ custom_components/sunny/
   manifest.json     # HA / HACS metadata
   sensor.py         # 4 sensors per window (sun, position, strategy, cloud)
   select.py         # 1 strategy selector per window
-  number.py         # 2 number entities per window (min_position, max_position)
+  number.py         # 3 number entities per window (min_position, max_position, max_illumination)
   button.py         # 1 button entity per window (reset_bounds)
   solar_math.py     # pure solar geometry calculations (no HA imports)
   strategies.py     # 7 control strategies (compute_position)

@@ -17,6 +17,7 @@ from .const import (
     DEFAULT_TEMP_THRESHOLD,
     DEFAULT_LIT_THRESHOLD,
     DEFAULT_TARGET_ILLUMINATION,
+    DEFAULT_MAX_ILLUMINATION,
     CONF_LUX_SENSORS,
     CONF_LUX_AREA_ID,
     CONF_LUX_HIGH,
@@ -413,6 +414,7 @@ class SunnyCoordinator(DataUpdateCoordinator):
             data["temp_threshold"] = win.get("temp_threshold", DEFAULT_TEMP_THRESHOLD)
             data["lit_threshold"] = win.get("lit_threshold", DEFAULT_LIT_THRESHOLD)
             data["target_illumination"] = win.get("target_illumination", DEFAULT_TARGET_ILLUMINATION)
+            data["max_illumination"] = win.get("max_illumination", DEFAULT_MAX_ILLUMINATION)
             strategy_name = win.get("strategy", "block_all")
             strategy = get_strategy(strategy_name)
             data["strategy"] = strategy_name

@@ -180,6 +180,40 @@ class TestSearchCoverPosition:
         assert 0 <= pos <= 100
 
 
+class TestSearchCoverPositionMax:
+    def test_behind(self):
+        assert strategies.search_cover_position_max(
+            {"behind": True, "lit_pct": 0}, 30.0
+        ) == 100
+
+    def test_all_shadowed(self):
+        assert strategies.search_cover_position_max(
+            {"behind": False, "lit_pct": 0.0, "obstacles": []}, 30.0
+        ) == 100
+
+    def test_no_lit(self):
+        assert strategies.search_cover_position_max(_no_sun_data(), 30.0) == 100
+
+    def test_returns_int(self):
+        pos = strategies.search_cover_position_max(_full_sun_data(), 30.0)
+        assert isinstance(pos, int)
+        assert 0 <= pos <= 100
+
+    def test_cap_respected(self):
+        """La position retournée ne dépasse pas le plafond."""
+        data = _full_sun_data()
+        for cap in (10.0, 30.0, 50.0, 80.0):
+            pos = strategies.search_cover_position_max(data, cap)
+            lit = strategies._lit_at_cover_position(data, pos)
+            assert lit <= cap + 0.5
+
+    def test_zero_cap_closes(self):
+        assert strategies.search_cover_position_max(_full_sun_data(), 0.0) == 0
+
+    def test_full_cap_opens(self):
+        assert strategies.search_cover_position_max(_full_sun_data(), 100.0) == 100
+
+
 # -----------------------------------------------------------------------
 # Bloc à tester
 # -----------------------------------------------------------------------
@@ -378,6 +412,28 @@ class TestTargetIlluminationStrategy:
         assert 0 <= pos <= 100
 
 
+class TestMaxIlluminationStrategy:
+    def test_returns_int(self):
+        s = strategies.MaxIlluminationStrategy()
+        pos = s.compute_position(_full_sun_data())
+        assert isinstance(pos, int)
+        assert 0 <= pos <= 100
+
+    def test_custom_cap(self):
+        s = strategies.MaxIlluminationStrategy()
+        data = _full_sun_data(max_illumination=50.0)
+        pos = s.compute_position(data)
+        lit = strategies._lit_at_cover_position(data, pos)
+        assert lit <= 50.5
+
+    def test_default_cap(self):
+        s = strategies.MaxIlluminationStrategy()
+        data = _full_sun_data()
+        pos = s.compute_position(data)
+        lit = strategies._lit_at_cover_position(data, pos)
+        assert lit <= 30.5
+
+
 class TestAlwaysClosedStrategy:
     def test_full_sun(self):
         s = strategies.AlwaysClosedStrategy()
@@ -503,11 +559,12 @@ class TestRegistry:
         assert "temperature_guard" in strategies.STRATEGIES
         assert "privacy_night" in strategies.STRATEGIES
         assert "target_illumination" in strategies.STRATEGIES
+        assert "max_illumination" in strategies.STRATEGIES
         assert "always_closed" in strategies.STRATEGIES
         assert "always_open" in strategies.STRATEGIES
         assert "lux_target" in strategies.STRATEGIES
         assert "lux_target_glare" in strategies.STRATEGIES
-        assert len(strategies.STRATEGIES) == 11
+        assert len(strategies.STRATEGIES) == 12
 
     def test_strategy_options(self):
         assert "block_all" in strategies.STRATEGY_OPTIONS

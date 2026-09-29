@@ -187,6 +187,41 @@ def search_cover_position(data: dict, target_pct: float) -> int:
     return min(100, max(0, round((lo + hi) / 2.0)))
 
 
+def search_cover_position_max(data: dict, max_pct: float) -> int:
+    """Recherche la position la plus ouverte dont l'éclairement reste ≤ max_pct.
+
+    Contrairement à search_cover_position (qui garantit AU MOINS target_pct),
+    cette variante plafonne l'ensoleillement : on ferme juste assez pour ne
+    jamais dépasser max_pct. Retourne 0-100."""
+    if data.get("behind") or data.get("lit_pct", 0) == 0:
+        return 100
+
+    # Même tout ouvert, on reste sous le plafond : on ouvre en grand.
+    if _lit_at_cover_position(data, 100) <= max_pct:
+        return 100
+
+    # Même tout fermé, on dépasse le plafond : on ne peut pas faire mieux.
+    if _lit_at_cover_position(data, 0) > max_pct:
+        return 0
+
+    # Étape 1 : balayage par pas de 5 % pour localiser la traversée.
+    lo, hi = 0, 100
+    for p in range(5, 101, 5):
+        if _lit_at_cover_position(data, p) > max_pct:
+            lo, hi = p - 5, p
+            break
+
+    # Étape 2 : recherche binaire de la position la plus ouverte ≤ max_pct.
+    for _ in range(8):
+        mid = (lo + hi) / 2.0
+        if _lit_at_cover_position(data, mid) <= max_pct:
+            lo = mid
+        else:
+            hi = mid
+
+    return min(100, max(0, round(lo)))
+
+
 def compute_glare_flags(
     groups: list[list[str]],
     tiers: dict[str, int],
@@ -318,6 +353,17 @@ class TargetIlluminationStrategy(BaseStrategy):
         return search_cover_position(data, target)
 
 
+class MaxIlluminationStrategy(BaseStrategy):
+    """Plafond d'ensoleillement : ferme pour ne jamais dépasser un % donné."""
+
+    name = "max_illumination"
+    label = "Ensoleillement maximal (plafond, ne pas dépasser)"
+
+    def compute_position(self, data: dict) -> int:
+        target = data.get("max_illumination", 30.0)
+        return search_cover_position_max(data, target)
+
+
 class AlwaysClosedStrategy(BaseStrategy):
     """Toujours fermé — isolation thermique, absence prolongée."""
 
@@ -403,6 +449,7 @@ STRATEGIES: dict[str, BaseStrategy] = {
     "temperature_guard": TemperatureGuardStrategy(),
     "privacy_night": PrivacyNightStrategy(),
     "target_illumination": TargetIlluminationStrategy(),
+    "max_illumination": MaxIlluminationStrategy(),
     "block_all": BlockAllStrategy(),
     "always_closed": AlwaysClosedStrategy(),
     "always_open": AlwaysOpenStrategy(),

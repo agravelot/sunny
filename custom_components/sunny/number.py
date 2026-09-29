@@ -11,8 +11,10 @@ from homeassistant.helpers.event import async_track_entity_registry_updated_even
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CONF_MAX_ILLUMINATION,
     CONF_MAX_POSITION,
     CONF_MIN_POSITION,
+    DEFAULT_MAX_ILLUMINATION,
     DEFAULT_MAX_POSITION,
     DEFAULT_MIN_POSITION,
     DOMAIN,
@@ -52,6 +54,9 @@ async def async_setup_entry(
         )
         entities.append(
             SunnyMaxPositionNumber(coordinator, name, idx, window_id, device_info)
+        )
+        entities.append(
+            SunnyMaxIlluminationNumber(coordinator, name, idx, window_id, device_info)
         )
 
     if pending_covers:
@@ -174,3 +179,26 @@ class SunnyMaxPositionNumber(SunnyBasePositionNumber):
 
     def _get_default(self) -> int:
         return DEFAULT_MAX_POSITION
+
+
+class SunnyMaxIlluminationNumber(SunnyBasePositionNumber):
+    """Entité number pour le plafond d'ensoleillement (stratégie max_illumination)."""
+
+    _attr_icon = "mdi:brightness-percent"
+
+    def __init__(
+        self,
+        coordinator: SunnyCoordinator,
+        window_name: str,
+        window_idx: int,
+        window_id: str,
+        device_info,
+    ) -> None:
+        super().__init__(coordinator, window_name, window_idx, window_id, device_info, "max_illumination")
+        self._attr_name = f"{window_name} Ensoleillement max"
+
+    def _get_config_key(self) -> str:
+        return CONF_MAX_ILLUMINATION
+
+    def _get_default(self) -> int:
+        return DEFAULT_MAX_ILLUMINATION

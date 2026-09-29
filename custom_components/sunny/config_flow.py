@@ -56,6 +56,7 @@ from .const import (
     CONF_LUX_SENSORS,
     CONF_LUX_STEP,
     CONF_TARGET_ILLUMINATION,
+    CONF_MAX_ILLUMINATION,
     CONF_STAGGER_DELAY,
     DEFAULT_NAME,
     DEFAULT_ORIENTATION,
@@ -82,6 +83,7 @@ from .const import (
     DEFAULT_LUX_LOW,
     DEFAULT_LUX_STEP,
     DEFAULT_TARGET_ILLUMINATION,
+    DEFAULT_MAX_ILLUMINATION,
     DEFAULT_STAGGER_DELAY,
 )
 from .strategies import STRATEGY_OPTIONS
@@ -162,6 +164,8 @@ def _build_window_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
         vol.Optional(CONF_TARGET_ILLUMINATION, default=defaults.get(CONF_TARGET_ILLUMINATION, DEFAULT_TARGET_ILLUMINATION)):
             vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+        vol.Optional(CONF_MAX_ILLUMINATION, default=defaults.get(CONF_MAX_ILLUMINATION, DEFAULT_MAX_ILLUMINATION)):
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
         vol.Optional(CONF_ZONE_ENTITY, default=defaults.get(CONF_ZONE_ENTITY)):
             EntitySelector(EntitySelectorConfig(domain="zone")),
         vol.Optional(CONF_LUX_SENSORS, default=defaults.get(CONF_LUX_SENSORS, [])):
@@ -223,6 +227,7 @@ def _cleanup_window_entities(
         ("switch", "auto_control"),
         ("number", "min_position"),
         ("number", "max_position"),
+        ("number", "max_illumination"),
         ("button", "reset_bounds"),
     ]:
         unique_id = f"{entry_id}_{window_id}_{window_name}_{suffix}"

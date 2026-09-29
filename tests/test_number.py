@@ -198,6 +198,15 @@ def max_number(mock_coordinator, device_info, mock_hass):
     return n
 
 
+@pytest.fixture
+def max_illumination_number(mock_coordinator, device_info, mock_hass):
+    n = number_module.SunnyMaxIlluminationNumber(
+        mock_coordinator, "Test", 0, "test_id", device_info,
+    )
+    n.hass = mock_hass
+    return n
+
+
 # ---------------------------------------------------------------------------
 # Tests SunnyMinPositionNumber
 # ---------------------------------------------------------------------------
@@ -269,4 +278,44 @@ class TestSunnyMaxPositionNumber:
         mock_hass.config_entries.async_update_entry.assert_called_once()
         args = mock_hass.config_entries.async_update_entry.call_args
         assert args[1]["options"]["windows"][0]["max_position"] == 75
+        mock_coordinator.async_request_refresh.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests SunnyMaxIlluminationNumber
+# ---------------------------------------------------------------------------
+
+class TestSunnyMaxIlluminationNumber:
+    def test_creation(self, max_illumination_number):
+        assert max_illumination_number._attr_name == "Test Ensoleillement max"
+        assert max_illumination_number._attr_has_entity_name is True
+
+    def test_unique_id(self, max_illumination_number):
+        assert (
+            max_illumination_number._attr_unique_id
+            == "test_entry_test_id_Test_max_illumination"
+        )
+
+    def test_native_min_max_step(self, max_illumination_number):
+        assert max_illumination_number._attr_native_min_value == 0
+        assert max_illumination_number._attr_native_max_value == 100
+        assert max_illumination_number._attr_native_step == 1
+
+    def test_native_value_default(self, max_illumination_number, mock_coordinator):
+        mock_coordinator.entry.options = {"windows": [{"name": "Test"}]}
+        assert max_illumination_number.native_value == 30.0
+
+    def test_native_value_from_options(self, max_illumination_number, mock_coordinator):
+        mock_coordinator.entry.options = {
+            "windows": [{"name": "Test", "max_illumination": 40}]
+        }
+        assert max_illumination_number.native_value == 40.0
+
+    @pytest.mark.asyncio
+    async def test_set_value(self, max_illumination_number, mock_coordinator, mock_hass):
+        mock_hass.config_entries.async_update_entry.reset_mock()
+        await max_illumination_number.async_set_native_value(45.0)
+        mock_hass.config_entries.async_update_entry.assert_called_once()
+        args = mock_hass.config_entries.async_update_entry.call_args
+        assert args[1]["options"]["windows"][0]["max_illumination"] == 45
         mock_coordinator.async_request_refresh.assert_called_once()
