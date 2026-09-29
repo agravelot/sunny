@@ -32,7 +32,12 @@ custom_components/sunny/
   solar_math.py     # pure solar geometry calculations (no HA imports)
   strategies.py     # 7 control strategies (compute_position)
   strings.json      # UI translations
+  brand/            # HA/HACS brand PNGs (icon + logo, @2x and dark variants)
+assets/
+  generate_brand.py # regenerates assets/*.svg and custom_components/sunny/brand/*.png
 ```
+
+- Brand images have **no field in `manifest.json` or `hacs.json`** — HA/HACS render them from `custom_components/sunny/brand/`. Edit `assets/generate_brand.py` and run it (`rsvg-convert` required) rather than editing the PNGs.
 
 - Standard HA pattern: CoordinatorEntity → `_handle_coordinator_update()` reads `coordinator.data[window_name]`
 - The coordinator is shared via `hass.data[DOMAIN][entry.entry_id]`
