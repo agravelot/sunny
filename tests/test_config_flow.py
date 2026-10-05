@@ -31,6 +31,7 @@ def _setup_ha_mocks():
     ha_config_entries = MagicMock()
     ha_config_entries.ConfigFlow = _MockConfigFlow
     ha_config_entries.OptionsFlow = _MockOptionsFlow
+    ha_config_entries.OptionsFlowWithReload = _MockOptionsFlow
 
     ha_entity_registry = MagicMock()
     ha_device_registry = MagicMock()
@@ -105,3 +106,40 @@ class TestIsWindowNameDuplicate:
 
     def test_empty_windows(self):
         assert cfg._is_window_name_duplicate([], "salon") is False
+
+
+# ---------------------------------------------------------------------------
+# Tests SunnyOptionsFlow.__init__ (copie profonde des options)
+# ---------------------------------------------------------------------------
+
+class TestOptionsFlowDeepCopy:
+    """Régression : le flow doit copier profondément entry.options.
+
+    Une copie superficielle fait partager la liste 'windows' et ses dicts
+    imbriqués avec entry.options. Les mutations du flow modifient alors
+    l'objet d'origine, HA ne détecte aucun changement et n'écrit rien
+    (perte silencieuse des ajouts/éditions/suppressions de fenêtres)."""
+
+    def test_windows_list_is_independent(self):
+        config_entry = MagicMock()
+        config_entry.entry_id = "test_entry"
+        config_entry.options = {"windows": [{"name": "Salon"}]}
+
+        flow = cfg.SunnyOptionsFlow(config_entry)
+
+        # Garde : sans base OptionsFlowWithReload réelle, cfg.SunnyOptionsFlow
+        # serait un MagicMock et le test ne vérifierait rien.
+        assert type(flow) is cfg.SunnyOptionsFlow
+        assert flow.data["windows"] is not config_entry.options["windows"]
+        assert flow.data["windows"][0] is not config_entry.options["windows"][0]
+
+    def test_mutation_does_not_leak_to_entry_options(self):
+        config_entry = MagicMock()
+        config_entry.entry_id = "test_entry"
+        config_entry.options = {"windows": [{"name": "Salon"}]}
+
+        flow = cfg.SunnyOptionsFlow(config_entry)
+        flow.data["windows"][0]["name"] = "Cuisine"
+        flow.data["windows"].append({"name": "Bureau"})
+
+        assert config_entry.options["windows"] == [{"name": "Salon"}]

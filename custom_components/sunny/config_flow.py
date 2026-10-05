@@ -1,5 +1,6 @@
 """Configuration UI pour l'intégration Sunny."""
 
+from copy import deepcopy
 from typing import Any
 
 import voluptuous as vol
@@ -342,7 +343,11 @@ class SunnyOptionsFlow(OptionsFlowWithReload):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.entry = config_entry
-        self.data: dict[str, Any] = dict(config_entry.options)
+        # deepcopy : le flow mute la liste 'windows' et ses dicts imbriqués
+        # (ajout/édition/suppression). Une copie superficielle partagerait ces
+        # objets avec entry.options → HA ne détecte aucun changement
+        # (entry.options == new_options) et n'écrit rien sur le disque.
+        self.data: dict[str, Any] = deepcopy(dict(config_entry.options))
         if CONF_WINDOWS not in self.data:
             self.data[CONF_WINDOWS] = []
         self._editing: int | None = None
