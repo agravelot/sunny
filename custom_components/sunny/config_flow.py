@@ -422,9 +422,29 @@ class SunnyOptionsFlow(OptionsFlowWithReload):
 
             # Fusionne avec l'existant : le formulaire n'expose pas 'obstacles'
             # ni 'id' — un remplacement intégral les effacerait définitivement.
+            old_win = (
+                self.data[CONF_WINDOWS][self._editing]
+                if self._editing is not None
+                and self._editing < len(self.data[CONF_WINDOWS])
+                else {}
+            )
             current = dict(self.data[CONF_WINDOWS][self._editing])
             current.update(user_input)
             self.data[CONF_WINDOWS][self._editing] = current
+
+            # Les unique_id embarquent window_name brut (cf. AGENTS.md). Après
+            # renommage, les entités de l'ancien nom deviennent orphelines :
+            # on les supprime, le rechargement les recrée sous le nouveau nom.
+            # Comparaison brute : même un changement de casse modifie
+            # l'unique_id et laisserait des entités orphelines.
+            if name != old_win.get(CONF_WINDOW_NAME, ""):
+                _cleanup_window_entities(
+                    self.hass,
+                    self.entry.entry_id,
+                    old_win.get(CONF_WINDOW_NAME, ""),
+                    old_win.get(CONF_WINDOW_ID, ""),
+                )
+
             self._editing = None
             return await self.async_step_init()
 
