@@ -120,6 +120,27 @@ def _is_window_name_duplicate(
     return False
 
 
+def _is_cover_entity_duplicate(
+    windows: list[dict[str, Any]],
+    cover_entity: str,
+    exclude_idx: int | None = None,
+) -> bool:
+    """Deux fenêtres ne peuvent pas piloter le même store.
+
+    Le coordinateur indexe les fenêtres par cover_entity (cf. _window_key) :
+    un doublon écrase silencieusement les données de l'autre fenêtre.
+    """
+    if not cover_entity:
+        return False
+    target = str(cover_entity).strip()
+    for i, win in enumerate(windows):
+        if exclude_idx is not None and i == exclude_idx:
+            continue
+        if str(win.get(CONF_COVER_ENTITY, "")).strip() == target:
+            return True
+    return False
+
+
 def _validate_lux_thresholds(values: dict) -> dict:
     """Valide que lux_high > lux_low si les deux sont définis."""
     high = values.get(CONF_LUX_HIGH)
@@ -280,6 +301,9 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if _is_window_name_duplicate(self.data[CONF_WINDOWS], name):
                 errors[CONF_WINDOW_NAME] = "duplicate_name"
 
+            if _is_cover_entity_duplicate(self.data[CONF_WINDOWS], cover_entity_id):
+                errors[CONF_COVER_ENTITY] = "duplicate_cover"
+
             if errors:
                 pass
             else:
@@ -413,6 +437,13 @@ class SunnyOptionsFlow(OptionsFlowWithReload):
             if _is_window_name_duplicate(self.data[CONF_WINDOWS], name, exclude_idx=self._editing):
                 errors[CONF_WINDOW_NAME] = "duplicate_name"
 
+            if _is_cover_entity_duplicate(
+                self.data[CONF_WINDOWS],
+                user_input.get(CONF_COVER_ENTITY, ""),
+                exclude_idx=self._editing,
+            ):
+                errors[CONF_COVER_ENTITY] = "duplicate_cover"
+
             if errors:
                 return self.async_show_form(
                     step_id="edit_window",
@@ -476,6 +507,9 @@ class SunnyOptionsFlow(OptionsFlowWithReload):
 
             if _is_window_name_duplicate(self.data[CONF_WINDOWS], name):
                 errors[CONF_WINDOW_NAME] = "duplicate_name"
+
+            if _is_cover_entity_duplicate(self.data[CONF_WINDOWS], cover_entity_id):
+                errors[CONF_COVER_ENTITY] = "duplicate_cover"
 
             if errors:
                 pass

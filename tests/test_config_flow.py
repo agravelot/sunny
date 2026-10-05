@@ -109,6 +109,37 @@ class TestIsWindowNameDuplicate:
 
 
 # ---------------------------------------------------------------------------
+# Tests _is_cover_entity_duplicate
+# ---------------------------------------------------------------------------
+
+class TestIsCoverEntityDuplicate:
+    """Régression : deux fenêtres ne doivent pas partager le même store.
+
+    Le coordinateur indexe par cover_entity (_window_key) : un doublon
+    écrase silencieusement les données de l'autre fenêtre."""
+
+    def test_exact_duplicate(self):
+        windows = [{"cover_entity": "cover.salon"}, {"cover_entity": "cover.cuisine"}]
+        assert cfg._is_cover_entity_duplicate(windows, "cover.salon") is True
+
+    def test_different_cover(self):
+        windows = [{"cover_entity": "cover.salon"}]
+        assert cfg._is_cover_entity_duplicate(windows, "cover.cuisine") is False
+
+    def test_empty_cover_never_duplicate(self):
+        windows = [{"cover_entity": ""}, {"cover_entity": ""}]
+        assert cfg._is_cover_entity_duplicate(windows, "") is False
+
+    def test_exclude_idx(self):
+        windows = [{"cover_entity": "cover.a"}, {"cover_entity": "cover.b"}]
+        assert cfg._is_cover_entity_duplicate(windows, "cover.a", exclude_idx=0) is False
+        assert cfg._is_cover_entity_duplicate(windows, "cover.a", exclude_idx=1) is True
+
+    def test_empty_windows(self):
+        assert cfg._is_cover_entity_duplicate([], "cover.a") is False
+
+
+# ---------------------------------------------------------------------------
 # Tests SunnyOptionsFlow.__init__ (copie profonde des options)
 # ---------------------------------------------------------------------------
 

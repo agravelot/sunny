@@ -3,6 +3,7 @@
   "config": {
     "error": {
       "duplicate_name": "Une fenêtre avec ce nom existe déjà",
+      "duplicate_cover": "Ce store est déjà utilisé par une autre fenêtre",
       "lux_threshold_invalid": "lux_high doit être supérieur à lux_low"
     },
     "step": {
@@ -53,6 +54,7 @@
   "options": {
     "error": {
       "duplicate_name": "Une fenêtre avec ce nom existe déjà",
+      "duplicate_cover": "Ce store est déjà utilisé par une autre fenêtre",
       "lux_threshold_invalid": "lux_high doit être supérieur à lux_low"
     },
     "step": {
