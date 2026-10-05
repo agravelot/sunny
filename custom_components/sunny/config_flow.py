@@ -318,10 +318,6 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_finish()
 
         schema = _build_window_schema(user_input or {})
-        if self.data[CONF_WINDOWS]:
-            schema = schema.extend({
-                vol.Optional("__add_another", default=True): bool,
-            })
 
         return self.async_show_form(
             step_id="window",
