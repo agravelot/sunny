@@ -5,7 +5,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.config_entries import OptionsFlow
+from homeassistant.config_entries import OptionsFlow, OptionsFlowWithReload
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -331,8 +331,14 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return SunnyOptionsFlow(config_entry)
 
 
-class SunnyOptionsFlow(OptionsFlow):
-    """Options flow — éditer/ajouter/supprimer des fenêtres."""
+class SunnyOptionsFlow(OptionsFlowWithReload):
+    """Options flow — éditer/ajouter/supprimer des fenêtres.
+
+    Le rechargement de l'entry est déclenché par Home Assistant à la fin du
+    flow (OptionsFlowWithReload). Les écritures d'options hors flow — number,
+    select, button — ne doivent PAS recharger : elles mettent à jour la valeur
+    en place puis rafraîchissent le coordinateur.
+    """
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.entry = config_entry

@@ -20,7 +20,7 @@ GitHub CI also validates HACS (`hacs/action`) and hassfest (`home-assistant/acti
 
 ```
 custom_components/sunny/
-  __init__.py       # setup entry, window ID migration, add_update_listener
+  __init__.py       # setup entry, window ID migration
   config_flow.py    # ConfigFlow (creation) + OptionsFlow (edit/delete)
   const.py          # constants (CONF_*, DEFAULT_*)
   coordinator.py    # DataUpdateCoordinator, recomputes sunlight for all windows
@@ -42,7 +42,10 @@ assets/
 
 - Standard HA pattern: CoordinatorEntity → `_handle_coordinator_update()` reads `coordinator.data[window_name]`
 - The coordinator is shared via `hass.data[DOMAIN][entry.entry_id]`
-- Options flow: `async_create_entry()` saves → `add_update_listener` → `async_reload()` → entities are recreated
+- Options flow: `SunnyOptionsFlow` extends `OptionsFlowWithReload` — HA reloads the entry
+  itself when the flow ends with changed options → entities are recreated. There is **no**
+  `add_update_listener`: option writes outside the flow (number/select/button) must update
+  the value in place and refresh the coordinator, never reload the entry.
 - A window without an `id` at startup triggers automatic migration in `__init__.py` (generates `id` from `cover_entity`)
 
 ## unique_id format
