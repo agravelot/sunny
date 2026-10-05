@@ -76,7 +76,17 @@ def _ray_box_intersect(
 def _normalize_obstacle(obs: dict) -> dict:
     """Normalise les clés d'un obstacle (format UI ox1… → x1…)."""
     if "x1" in obs:
-        return obs
+        # Un dict déjà normalisé peut être partiel (config ancienne ou saisie
+        # manuelle) : on complète les clés manquantes pour éviter un KeyError
+        # dans _ray_box_intersect.
+        return {
+            "x1": obs.get("x1", 0.0),
+            "y1": obs.get("y1", 0.0),
+            "z1": obs.get("z1", 0.0),
+            "x2": obs.get("x2", 0.0),
+            "y2": obs.get("y2", 0.0),
+            "z2": obs.get("z2", 0.0),
+        }
     mapping = {"x1": "ox1", "y1": "oy1", "z1": "oz1", "x2": "ox2", "y2": "oy2", "z2": "oz2"}
     return {k: obs.get(src, 0.0) for k, src in mapping.items()}
 

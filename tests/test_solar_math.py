@@ -390,6 +390,32 @@ class TestObstacles:
         assert approx(result_small["lit_pct"]) == 100.0
 
 
+class TestNormalizeObstacle:
+    """Régression : un obstacle déjà normalisé mais partiel ne doit pas
+    provoquer de KeyError dans _ray_box_intersect."""
+
+    def test_partial_normalized_dict_is_completed(self):
+        obs = solar_math._normalize_obstacle({"x1": 1.0, "y1": 2.0})
+        assert obs == {
+            "x1": 1.0, "y1": 2.0, "z1": 0.0,
+            "x2": 0.0, "y2": 0.0, "z2": 0.0,
+        }
+
+    def test_partial_obstacle_usable_in_compute_window(self):
+        # {"x1":0,"y1":0} seul : sans durcissement, KeyError sur z1…
+        result = solar_math.compute_window(
+            h=30, As=180, An=180, W=2, Hw=1.5, e=0,
+            obstacles=[{"x1": 0.0, "y1": 0.0}],
+        )
+        assert "lit_pct" in result
+
+    def test_ui_format_is_normalized(self):
+        obs = solar_math._normalize_obstacle({
+            "ox1": 1, "oy1": 2, "oz1": 3, "ox2": 4, "oy2": 5, "oz2": 6,
+        })
+        assert obs == {"x1": 1, "y1": 2, "z1": 3, "x2": 4, "y2": 5, "z2": 6}
+
+
 class TestReliefAngle:
     def test_relief_blocks_sun_below(self):
         """Soleil sous l'angle de relief → behind."""
