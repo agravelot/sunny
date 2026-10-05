@@ -101,6 +101,7 @@ class SunnyStrategySelect(CoordinatorEntity, SelectEntity):
         new_options = dict(self.coordinator.entry.options)
         windows = list(new_options.get("windows", []))
         if 0 <= self._window_idx < len(windows):
+            windows[self._window_idx] = dict(windows[self._window_idx])
             windows[self._window_idx]["strategy"] = option
         new_options["windows"] = windows
         self.hass.config_entries.async_update_entry(
