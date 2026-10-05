@@ -23,6 +23,22 @@ set_auto_control:
         area:
           multiple: true
 
+set_cloud_factor:
+  name: Définir l'influence des nuages
+  description: Règle l'influence des nuages (0-100 %) sur l'ensoleillement estimé, pour toutes les fenêtres. 0 ignore les nuages, 100 annule tout soleil direct sous un ciel entièrement couvert.
+  fields:
+    value:
+      name: Influence (%)
+      description: 0 = ignorer les nuages, 100 = annuler tout soleil direct sous ciel couvert.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: box
+
 refresh:
   name: Rafraîchir l'ensoleillement
   description: Recalcule l'ensoleillement de toutes les fenêtres. À utiliser dans une automation pour remplacer le rafraîchissement périodique.

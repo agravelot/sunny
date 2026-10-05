@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/agravelot/sunny/actions/workflows/validate.yml"><img alt="Validate" src="https://github.com/agravelot/sunny/actions/workflows/validate.yml/badge.svg"></a>
   <a href="https://github.com/hacs/integration"><img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-385%20passing-brightgreen.svg">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-387%20passing-brightgreen.svg">
   <img alt="Python 3.13" src="https://img.shields.io/badge/python-3.13-blue.svg">
   <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-blue.svg">
   <a href="LICENSE.md"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-yellow.svg"></a>
@@ -31,7 +31,7 @@ It is a complete Home Assistant custom integration: a pure-Python calculation co
 - 12 configurable control strategies per window
 - Settings editable at any time via the Home Assistant Config Flow / Options Flow
 - Ships brand icons/logos and is HACS compatible
-- 385 unit tests, HACS and hassfest validated on every push
+- 387 unit tests, HACS and hassfest validated on every push
 
 ## How it works
 
@@ -225,6 +225,22 @@ action:
       position: "{{ state_attr('sensor.salon_position_desiree', 'desired_position') | int }}"
 ```
 
+### Cloud influence from an automation
+
+`sunny.set_cloud_factor` sets the cloud influence factor (0-100%) for every Sunny entry and refreshes the computed sunlight:
+
+```yaml
+alias: "Dim sunlight under overcast sky"
+trigger:
+  - platform: state
+    entity_id: weather.home
+    to: "cloudy"
+action:
+  - service: sunny.set_cloud_factor
+    data:
+      value: 100
+```
+
 ## Simulator
 
 An interactive simulator is provided in `simulateur_ensoleillement_fenetre.html` (open it directly in a browser):
@@ -249,7 +265,7 @@ python3 assets/generate_brand.py    # requires rsvg-convert
 ## Development
 
 ```bash
-python3 -m pytest tests/ -v         # 385 unit tests
+python3 -m pytest tests/ -v         # 387 unit tests
 ```
 
 Tests do not import Home Assistant: `solar_math.py` and `strategies.py` are pure Python and covered directly.

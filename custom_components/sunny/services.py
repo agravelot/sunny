@@ -8,11 +8,12 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import area_registry as ar, config_validation as cv, entity_registry as er
 
-from .const import DOMAIN
+from .const import CONF_CLOUD_FACTOR, DEFAULT_CLOUD_FACTOR, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_AUTO_CONTROL = "set_auto_control"
+SERVICE_SET_CLOUD_FACTOR = "set_cloud_factor"
 SERVICE_REFRESH = "refresh"
 
 REFRESH_SCHEMA = vol.Schema({})
@@ -22,6 +23,12 @@ SCHEMA = vol.Schema(
         vol.Required("enabled"): cv.boolean,
         vol.Optional("entity_id"): cv.entity_ids,
         vol.Optional("area_id"): [cv.string],
+    }
+)
+
+CLOUD_FACTOR_SCHEMA = vol.Schema(
+    {
+        vol.Required("value"): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
     }
 )
 
@@ -121,6 +128,29 @@ async def _handle_refresh(call: ServiceCall) -> None:
     await asyncio.gather(*(co.async_refresh() for co in coordinators))
 
 
+async def _handle_set_cloud_factor(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Règle l'influence des nuages de toutes les entries Sunny."""
+    value = call.data["value"]
+    coordinators = list(hass.data.get(DOMAIN, {}).values())
+    if not coordinators:
+        _LOGGER.warning("Aucune entry Sunny chargée, set_cloud_factor ignoré")
+        return
+
+    for coordinator in coordinators:
+        entry = coordinator.entry
+        new_options = dict(entry.options)
+        if new_options.get(CONF_CLOUD_FACTOR, DEFAULT_CLOUD_FACTOR) == value:
+            continue
+        new_options[CONF_CLOUD_FACTOR] = value
+        hass.config_entries.async_update_entry(entry, options=new_options)
+        # Pas d'update listener sur l'entry (cf. AGENTS.md) : la valeur est
+        # relue puis le coordinateur rafraîchi, jamais de rechargement.
+        coordinator.entry = hass.config_entries.async_get_entry(entry.entry_id)
+
+    _LOGGER.info("set_cloud_factor value=%s sur %d entry(s)", value, len(coordinators))
+    await asyncio.gather(*(co.async_request_refresh() for co in coordinators))
+
+
 def async_register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_SET_AUTO_CONTROL):
         return
@@ -140,4 +170,14 @@ def async_register_services(hass: HomeAssistant) -> None:
         SERVICE_REFRESH,
         _handle_refresh,
         schema=REFRESH_SCHEMA,
+    )
+
+    async def _handle_cloud_factor(call: ServiceCall) -> None:
+        await _handle_set_cloud_factor(hass, call)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_CLOUD_FACTOR,
+        _handle_cloud_factor,
+        schema=CLOUD_FACTOR_SCHEMA,
     )

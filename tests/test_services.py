@@ -447,7 +447,8 @@ class TestRegisterServices:
         registered = [c[0][:2] for c in hass.services.async_register.call_args_list]
         assert ("sunny", "set_auto_control") in registered
         assert ("sunny", "refresh") in registered
-        assert len(registered) == 2
+        assert ("sunny", "set_cloud_factor") in registered
+        assert len(registered) == 3
 
     @pytest.mark.asyncio
     async def test_refresh_handler_called_with_call_only(self):
@@ -480,3 +481,48 @@ class TestRegisterServices:
         svc.async_register_services(hass)
 
         hass.services.async_register.assert_not_called()
+
+
+class TestHandleSetCloudFactor:
+    @pytest.mark.asyncio
+    async def test_updates_all_entries_and_refreshes(self):
+        hass = _make_hass()
+        coordinators = {}
+        for eid, current in [("entry1", 0.0), ("entry2", 50.0)]:
+            coord = MagicMock()
+            entry = MagicMock()
+            entry.entry_id = eid
+            entry.options = {"cloud_factor": current, "windows": []}
+            coord.entry = entry
+            coord.async_request_refresh = AsyncMock()
+            coordinators[eid] = coord
+        hass.data = {svc.DOMAIN: coordinators}
+
+        def _update(entry, options=None, **kwargs):
+            entry.options = options
+            return True
+
+        hass.config_entries.async_update_entry.side_effect = _update
+        hass.config_entries.async_get_entry.side_effect = (
+            lambda eid: coordinators[eid].entry
+        )
+
+        call = MagicMock()
+        call.data = {"value": 100.0}
+        await svc._handle_set_cloud_factor(hass, call)
+
+        assert coordinators["entry1"].entry.options["cloud_factor"] == 100.0
+        assert coordinators["entry2"].entry.options["cloud_factor"] == 100.0
+        for coord in coordinators.values():
+            coord.async_request_refresh.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_no_entries_is_noop(self):
+        hass = _make_hass()
+        hass.data = {}
+
+        call = MagicMock()
+        call.data = {"value": 10.0}
+        await svc._handle_set_cloud_factor(hass, call)
+
+        hass.config_entries.async_update_entry.assert_not_called()
