@@ -99,16 +99,38 @@ class SunnyBasePositionNumber(CoordinatorEntity, NumberEntity):
         super().__init__(coordinator)
         self._window_name = window_name
         self._window_idx = window_idx
+        self._window_id = window_id
+        # cover_entity capturé à la construction : l'index est valide à cet
+        # instant. Il sert ensuite à retrouver la fenêtre même si l'index
+        # positionnel devient obsolète (fenêtre ajoutée/supprimée entre deux
+        # écritures, cf. coordinator._window_key).
+        self._cover_entity = ""
+        _windows = coordinator.entry.options.get("windows", [])
+        if 0 <= window_idx < len(_windows):
+            self._cover_entity = _windows[window_idx].get("cover_entity", "")
         self._attr_unique_id = (
             f"{coordinator.entry.entry_id}_{window_id}_{window_name}_{number_type}"
         )
         self._attr_device_info = device_info
 
+    def _resolve_window_index(self, windows: list[dict]) -> int | None:
+        """Index courant de la fenêtre : cover_entity → id → index positionnel."""
+        if self._cover_entity:
+            for i, w in enumerate(windows):
+                if w.get("cover_entity") == self._cover_entity:
+                    return i
+        if self._window_id:
+            for i, w in enumerate(windows):
+                if w.get("id") == self._window_id:
+                    return i
+        return self._window_idx if 0 <= self._window_idx < len(windows) else None
+
     @property
     def native_value(self) -> float | None:
         windows = self.coordinator.entry.options.get("windows", [])
-        if self._window_idx < len(windows):
-            win = windows[self._window_idx]
+        idx = self._resolve_window_index(windows)
+        if idx is not None:
+            win = windows[idx]
             key = self._get_config_key()
             return float(win.get(key, self._get_default()))
         return float(self._get_default())
@@ -123,9 +145,10 @@ class SunnyBasePositionNumber(CoordinatorEntity, NumberEntity):
         int_value = int(value)
         new_options = dict(self.coordinator.entry.options)
         windows = list(new_options.get("windows", []))
-        if self._window_idx < len(windows):
-            windows[self._window_idx] = dict(windows[self._window_idx])
-            windows[self._window_idx][self._get_config_key()] = int_value
+        idx = self._resolve_window_index(windows)
+        if idx is not None:
+            windows[idx] = dict(windows[idx])
+            windows[idx][self._get_config_key()] = int_value
         new_options["windows"] = windows
         self.hass.config_entries.async_update_entry(
             self.coordinator.entry, options=new_options

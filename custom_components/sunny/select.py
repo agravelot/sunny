@@ -80,11 +80,29 @@ class SunnyStrategySelect(CoordinatorEntity, SelectEntity):
         self._window_name = window_name
         self._window_idx = window_idx
         self._window_id = window_id
+        # cover_entity capturé à la construction (index encore valide) pour
+        # retrouver la fenêtre si l'index positionnel devient obsolète.
+        self._cover_entity = ""
+        _windows = coordinator.entry.options.get("windows", [])
+        if 0 <= window_idx < len(_windows):
+            self._cover_entity = _windows[window_idx].get("cover_entity", "")
         self._attr_unique_id = (
             f"{coordinator.entry.entry_id}_{window_id}_{window_name}_strategy_select"
         )
         self._attr_device_info = device_info
         self._attr_name = f"{window_name} Choix stratégie"
+
+    def _resolve_window_index(self, windows: list[dict]) -> int | None:
+        """Index courant de la fenêtre : cover_entity → id → index positionnel."""
+        if self._cover_entity:
+            for i, w in enumerate(windows):
+                if w.get("cover_entity") == self._cover_entity:
+                    return i
+        if self._window_id:
+            for i, w in enumerate(windows):
+                if w.get("id") == self._window_id:
+                    return i
+        return self._window_idx if 0 <= self._window_idx < len(windows) else None
 
     @property
     def options(self) -> list[str]:
@@ -100,9 +118,10 @@ class SunnyStrategySelect(CoordinatorEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         new_options = dict(self.coordinator.entry.options)
         windows = list(new_options.get("windows", []))
-        if 0 <= self._window_idx < len(windows):
-            windows[self._window_idx] = dict(windows[self._window_idx])
-            windows[self._window_idx]["strategy"] = option
+        idx = self._resolve_window_index(windows)
+        if idx is not None:
+            windows[idx] = dict(windows[idx])
+            windows[idx]["strategy"] = option
         new_options["windows"] = windows
         self.hass.config_entries.async_update_entry(
             self.coordinator.entry, options=new_options
