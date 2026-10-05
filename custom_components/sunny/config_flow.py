@@ -292,7 +292,12 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 user_input = _validate_lux_thresholds(user_input)
             except vol.Invalid:
-                errors["lux_high"] = "lux_threshold_invalid"
+                # Signale le champ réellement fautif : lux_low > lux_high
+                # pointe lux_low, sinon lux_high.
+                if user_input.get(CONF_LUX_LOW, 0) > user_input.get(CONF_LUX_HIGH, 0):
+                    errors[CONF_LUX_LOW] = "lux_threshold_invalid"
+                else:
+                    errors[CONF_LUX_HIGH] = "lux_threshold_invalid"
 
             if name == DEFAULT_NAME and cover_entity_id:
                 name = _get_cover_friendly_name(self.hass, cover_entity_id)
@@ -432,7 +437,12 @@ class SunnyOptionsFlow(OptionsFlowWithReload):
             try:
                 user_input = _validate_lux_thresholds(user_input)
             except vol.Invalid:
-                errors["lux_high"] = "lux_threshold_invalid"
+                # Signale le champ réellement fautif : lux_low > lux_high
+                # pointe lux_low, sinon lux_high.
+                if user_input.get(CONF_LUX_LOW, 0) > user_input.get(CONF_LUX_HIGH, 0):
+                    errors[CONF_LUX_LOW] = "lux_threshold_invalid"
+                else:
+                    errors[CONF_LUX_HIGH] = "lux_threshold_invalid"
 
             if _is_window_name_duplicate(self.data[CONF_WINDOWS], name, exclude_idx=self._editing):
                 errors[CONF_WINDOW_NAME] = "duplicate_name"
@@ -499,7 +509,12 @@ class SunnyOptionsFlow(OptionsFlowWithReload):
             try:
                 user_input = _validate_lux_thresholds(user_input)
             except vol.Invalid:
-                errors["lux_high"] = "lux_threshold_invalid"
+                # Signale le champ réellement fautif : lux_low > lux_high
+                # pointe lux_low, sinon lux_high.
+                if user_input.get(CONF_LUX_LOW, 0) > user_input.get(CONF_LUX_HIGH, 0):
+                    errors[CONF_LUX_LOW] = "lux_threshold_invalid"
+                else:
+                    errors[CONF_LUX_HIGH] = "lux_threshold_invalid"
 
             if name == DEFAULT_NAME and cover_entity_id:
                 name = _get_cover_friendly_name(self.hass, cover_entity_id)
