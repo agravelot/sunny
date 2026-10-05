@@ -17,7 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import SunnyCoordinator
+from .coordinator import SunnyCoordinator, _window_key
 from .strategies import STRATEGIES
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,7 +124,10 @@ async def async_setup_entry(
         else:
             device_info = fallback_device_info(entry, name)
 
-        window_id = win.get("id", win.get("cover_entity", str(idx)))
+        # Même clé que le coordinateur (_window_key) : 'id' vide ou absent
+        # doit retomber sur cover_entity puis sur l'index, sinon les données
+        # du coordinateur ne sont jamais retrouvées par l'entité.
+        window_id = _window_key(win, idx)
         entities.extend(_create_window_entities(coordinator, name, window_id, device_info))
 
     if pending_covers:

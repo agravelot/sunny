@@ -16,7 +16,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DEFAULT_COMMAND_TIMEOUT, DEFAULT_POSITION_THRESHOLD, DOMAIN
-from .coordinator import SunnyCoordinator
+from .coordinator import SunnyCoordinator, _window_key
 from .sensor import fallback_device_info, resolve_cover_device
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ async def async_setup_entry(
     for idx, win in enumerate(windows):
         name = win["name"]
         cover_entity_id = win.get("cover_entity", "")
-        window_id = win.get("id", win.get("cover_entity", str(idx)))
+        window_id = _window_key(win, idx)
 
         if cover_entity_id:
             device_info = await resolve_cover_device(
