@@ -411,6 +411,22 @@ class TestTargetIlluminationStrategy:
         pos = s.compute_position(data)
         assert 0 <= pos <= 100
 
+    def test_unreachable_target_opens_fully(self):
+        """Cible inatteignable → store grand ouvert (max de lumière dispo).
+
+        Fenêtre très ombrée latéralement (d_lat = W) : même ouvert, aucun
+        point n'est éclairé. Se fermer donnerait moins de lumière encore."""
+        s = strategies.TargetIlluminationStrategy()
+        data = _full_sun_data(
+            target_illumination=50.0,
+            d_lat=1.0,
+            gamma=10.0,
+            window_width=1.0,
+            window_height=1.0,
+        )
+        pos = s.compute_position(data)
+        assert pos == 100
+
 
 class TestMaxIlluminationStrategy:
     def test_returns_int(self):

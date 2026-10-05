@@ -173,7 +173,10 @@ def search_cover_position(data: dict, target_pct: float) -> int:
         prev_lit = lit
 
     if not found:
-        return 100 if _lit_at_cover_position(data, 100) >= target_pct else 0
+        # Cible inatteignable : la lumière maximale (store ouvert) est sous
+        # target_pct. Ouvrir en grand donne le maximum disponible ; se fermer
+        # irait à l'opposé de l'intention de la stratégie.
+        return 100
 
     # Étape 2 : recherche binaire dans [lo, hi] pour trouver le minimum >= target_pct
     for _ in range(8):
