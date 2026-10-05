@@ -9,6 +9,68 @@ except ImportError:
     from solar_math import _ray_box_intersect
 
 
+# Condition météo HA → couverture nuageuse (%) lorsque l'entité weather
+# n'expose pas l'attribut cloud_coverage (ex. met.no). Les conditions non
+# listées (windy, exceptional…) sont considérées comme indéterminées.
+_CONDITION_CLOUD_PCT: dict[str, float] = {
+    "sunny": 0.0,
+    "clear-night": 0.0,
+    "partlycloudy": 50.0,
+    "cloudy": 100.0,
+    "fog": 100.0,
+    "rainy": 100.0,
+    "pouring": 100.0,
+    "lightning": 100.0,
+    "lightning-rainy": 100.0,
+    "snowy": 100.0,
+    "snowy-rainy": 100.0,
+    "hail": 100.0,
+}
+
+
+def _as_float(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def cloud_fraction(cloud_coverage, weather_condition) -> float | None:
+    """Fraction de ciel couvert (0-1), ou None si indéterminée.
+
+    Priorité à l'attribut ``cloud_coverage`` de l'entité météo ; à défaut, la
+    condition (``rainy``, ``cloudy``…). None ⇒ aucune atténuation appliquée.
+    """
+    value = _as_float(cloud_coverage)
+    if value is not None:
+        return max(0.0, min(1.0, value / 100.0))
+    if weather_condition in _CONDITION_CLOUD_PCT:
+        return _CONDITION_CLOUD_PCT[weather_condition] / 100.0
+    return None
+
+
+def apply_cloud_factor(
+    lit_pct: float,
+    cloud_factor,
+    cloud_coverage,
+    weather_condition,
+) -> float:
+    """Réduit l'ensoleillement direct estimé selon la couverture nuageuse.
+
+    ``cloud_factor`` (0-100) est l'influence des nuages : 0 les ignore, 100
+    annule tout soleil direct sous un ciel entièrement couvert. L'ensoleillement
+    est purement géométrique ; c'est ici qu'on le corrige des nuages, une fois
+    pour toutes les stratégies.
+    """
+    factor = _as_float(cloud_factor)
+    if not factor or factor <= 0:
+        return lit_pct
+    fraction = cloud_fraction(cloud_coverage, weather_condition)
+    if fraction is None:
+        return lit_pct
+    return lit_pct * (1.0 - fraction * factor / 100.0)
+
+
 class BaseStrategy(ABC):
     """Classe de base pour une stratégie de pilotage."""
 

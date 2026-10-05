@@ -11,6 +11,8 @@ from homeassistant.helpers import device_registry as dr
 
 from .const import (
     DOMAIN,
+    CONF_CLOUD_FACTOR,
+    DEFAULT_CLOUD_FACTOR,
     DEFAULT_RELIEF_ANGLE,
     DEFAULT_STRATEGY_HIGH,
     DEFAULT_STRATEGY_LOW,
@@ -34,7 +36,7 @@ from .const import (
     DEFAULT_STAGGER_DELAY,
 )
 from .solar_math import compute_window
-from .strategies import compute_glare_flags, get_strategy
+from .strategies import apply_cloud_factor, compute_glare_flags, get_strategy
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -365,6 +367,11 @@ class SunnyCoordinator(DataUpdateCoordinator):
                 weather_data["weather_condition"] = weather.state
                 weather_data["temperature"] = weather.attributes.get("temperature")
 
+        cloud_factor = self.entry.options.get(
+            CONF_CLOUD_FACTOR,
+            self.entry.data.get(CONF_CLOUD_FACTOR, DEFAULT_CLOUD_FACTOR),
+        )
+
         results = {}
         lux_ctx: dict[str, dict] = {}
         windows = self.entry.options.get("windows", [])
@@ -415,6 +422,14 @@ class SunnyCoordinator(DataUpdateCoordinator):
             data["lit_threshold"] = win.get("lit_threshold", DEFAULT_LIT_THRESHOLD)
             data["target_illumination"] = win.get("target_illumination", DEFAULT_TARGET_ILLUMINATION)
             data["max_illumination"] = win.get("max_illumination", DEFAULT_MAX_ILLUMINATION)
+            # Ensoleillement géométrique corrigé des nuages, une fois pour
+            # toutes les stratégies (cf. strategies.apply_cloud_factor).
+            data["lit_pct"] = apply_cloud_factor(
+                data.get("lit_pct", 0.0),
+                cloud_factor,
+                weather_data["cloud_coverage"],
+                weather_data["weather_condition"],
+            )
             strategy_name = win.get("strategy", "block_all")
             strategy = get_strategy(strategy_name)
             data["strategy"] = strategy_name

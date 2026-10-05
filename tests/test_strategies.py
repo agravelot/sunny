@@ -787,3 +787,46 @@ class TestComputeGlareFlags:
         assert flags["A"]["can_open"] is True
         assert flags["B"]["can_open"] is True
         assert flags["A"]["can_close"] is True
+
+
+# -----------------------------------------------------------------------
+# Atténuation nuageuse
+# -----------------------------------------------------------------------
+
+class TestCloudFraction:
+    def test_cloud_coverage_priority(self):
+        assert strategies.cloud_fraction(25, "sunny") == pytest.approx(0.25)
+
+    def test_cloud_coverage_clamped(self):
+        assert strategies.cloud_fraction(150, None) == 1.0
+        assert strategies.cloud_fraction(-10, None) == 0.0
+
+    def test_condition_fallback(self):
+        assert strategies.cloud_fraction(None, "cloudy") == 1.0
+        assert strategies.cloud_fraction(None, "partlycloudy") == 0.5
+        assert strategies.cloud_fraction(None, "rainy") == 1.0
+
+    def test_unknown_is_none(self):
+        assert strategies.cloud_fraction(None, "windy") is None
+        assert strategies.cloud_fraction(None, None) is None
+        assert strategies.cloud_fraction("n/a", None) is None
+
+
+class TestApplyCloudFactor:
+    def test_factor_zero_disabled(self):
+        assert strategies.apply_cloud_factor(80.0, 0, 100, "cloudy") == 80.0
+
+    def test_full_overcast_full_factor(self):
+        assert strategies.apply_cloud_factor(80.0, 100, 100, "cloudy") == 0.0
+
+    def test_half_factor(self):
+        assert strategies.apply_cloud_factor(80.0, 50, 100, "cloudy") == pytest.approx(40.0)
+
+    def test_partial_clouds(self):
+        assert strategies.apply_cloud_factor(80.0, 100, 25, None) == pytest.approx(60.0)
+
+    def test_unknown_clouds_unchanged(self):
+        assert strategies.apply_cloud_factor(80.0, 100, None, None) == 80.0
+
+    def test_string_factor_and_coverage(self):
+        assert strategies.apply_cloud_factor(80.0, "50", "100", None) == pytest.approx(40.0)

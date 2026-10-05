@@ -9,9 +9,10 @@
     "step": {
       "user": {
         "title": "Configuration Sunny",
-        "description": "Sélectionnez une entité météo (optionnelle) pour enrichir les données des capteurs d'ensoleillement.",
+        "description": "Sélectionnez une entité météo (optionnelle) pour enrichir les données des capteurs et corriger l'ensoleillement selon les nuages.",
         "data": {
-          "weather_entity": "Entité météo (optionnelle)"
+          "weather_entity": "Entité météo (optionnelle)",
+          "cloud_factor": "Influence des nuages sur l'ensoleillement (%)"
         }
       },
       "window": {
@@ -60,7 +61,7 @@
     "step": {
       "init": {
         "title": "Gérer les fenêtres",
-        "description": "Sélectionnez une fenêtre à modifier, ajoutez-en une nouvelle, ou changez l'entité météo.",
+        "description": "Sélectionnez une fenêtre à modifier, ajoutez-en une nouvelle, ou changez la météo (entité et influence des nuages).",
         "data": {
           "action": "Action",
           "window": "Fenêtre"
@@ -121,8 +122,10 @@
       },
       "weather": {
         "title": "Entité météo",
+        "description": "Influence des nuages : 0 ignore les nuages, 100 annule tout soleil direct sous un ciel entièrement couvert.",
         "data": {
-          "weather_entity": "Entité météo (optionnelle)"
+          "weather_entity": "Entité météo (optionnelle)",
+          "cloud_factor": "Influence des nuages sur l'ensoleillement (%)"
         }
       },
       "position_threshold": {
@@ -179,7 +182,7 @@
         "edit": "Modifier",
         "delete": "Supprimer",
         "add": "Ajouter une fenêtre",
-        "weather": "Changer l'entité météo",
+        "weather": "Entité météo et influence des nuages",
         "position_threshold": "Changer le seuil de position",
         "stagger": "Configurer l'échelonnement des stores",
         "obstacles": "Gérer les obstacles",

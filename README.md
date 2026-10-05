@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/agravelot/sunny/actions/workflows/validate.yml"><img alt="Validate" src="https://github.com/agravelot/sunny/actions/workflows/validate.yml/badge.svg"></a>
   <a href="https://github.com/hacs/integration"><img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-359%20passing-brightgreen.svg">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-385%20passing-brightgreen.svg">
   <img alt="Python 3.13" src="https://img.shields.io/badge/python-3.13-blue.svg">
   <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-blue.svg">
   <a href="LICENSE.md"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-yellow.svg"></a>
@@ -26,12 +26,12 @@ It is a complete Home Assistant custom integration: a pure-Python calculation co
 
 - Computes the direct sunlight percentage on a window from the sun position
 - Accounts for facade orientation, wall thickness (reveal), external obstructions (screen wall) and building altitude (horizon dip)
-- Integrates weather data (cloud coverage, temperature, condition) to enrich the sensors
+- Integrates weather data (cloud coverage, temperature, condition): a configurable cloud factor dims the estimated direct sunlight
 - Creates 4 sensors per window (sun, desired position, active strategy, cloud coverage) + 1 strategy selector
 - 12 configurable control strategies per window
 - Settings editable at any time via the Home Assistant Config Flow / Options Flow
 - Ships brand icons/logos and is HACS compatible
-- 359 unit tests, HACS and hassfest validated on every push
+- 385 unit tests, HACS and hassfest validated on every push
 
 ## How it works
 
@@ -74,7 +74,7 @@ Copy the `custom_components/sunny` folder into Home Assistant's `custom_componen
 ## Configuration
 
 1. **Settings → Devices & Services → Add Integration → Sunny**
-2. Select a weather entity (optional) to enrich sensors with temperature and cloud coverage
+2. Select a weather entity (optional) to enrich sensors with temperature and cloud coverage, and set the cloud influence factor (0-100%)
 3. Add one or more windows:
 
 | Parameter | Description | Default |
@@ -107,13 +107,24 @@ Copy the `custom_components/sunny` folder into Home Assistant's `custom_componen
 
 Parameters can be changed at any time via the **Configure** button on the integration.
 
+### Cloud influence
+
+The optional **cloud influence** factor (weather settings, 0-100%, default 0) dims the estimated direct sunlight by the weather entity's cloud coverage:
+
+**lit_pct_effective = lit_pct × (1 − cloud_fraction × cloud_factor / 100)**
+
+- `0` ignores clouds (default, current behaviour)
+- `100` cancels all direct sunlight under a fully overcast sky
+
+Cloud coverage comes from the weather entity's `cloud_coverage` attribute; when it is absent (e.g. met.no), the weather condition is used instead (`sunny`/`clear-night` → 0%, `partlycloudy` → 50%, `cloudy`/`fog`/`rainy`/`snowy`… → 100%). Since `lit_pct` feeds every strategy, the correction applies to all of them (e.g. `max_illumination` opens further when the sky is overcast).
+
 ## Sensors
 
 Each window produces the following entities:
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| `{name} Ensoleillement` | `sensor` | Direct sunlight percentage (0-100%) |
+| `{name} Ensoleillement` | `sensor` | Direct sunlight percentage (0-100%), cloud-adjusted when a cloud influence factor is set |
 | `{name} Position désirée` | `sensor` | Recommended blind position (0-100%) |
 | `{name} Stratégie` | `sensor` | Currently active strategy name |
 | `{name} Couverture nuageuse` | `sensor` | Cloud coverage (%), if weather configured |
@@ -238,7 +249,7 @@ python3 assets/generate_brand.py    # requires rsvg-convert
 ## Development
 
 ```bash
-python3 -m pytest tests/ -v         # 359 unit tests
+python3 -m pytest tests/ -v         # 385 unit tests
 ```
 
 Tests do not import Home Assistant: `solar_math.py` and `strategies.py` are pure Python and covered directly.

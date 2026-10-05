@@ -858,3 +858,59 @@ class TestAsyncUpdateDataGlare:
         assert results["cover.glare"]["desired_position"] == 80
         assert "cover.control" in results
         assert "desired_position" in results["cover.control"]
+
+
+# ---------------------------------------------------------------------------
+# Atténuation nuageuse e2e
+# ---------------------------------------------------------------------------
+
+class TestCloudFactorAttenuation:
+    """Le cloud_factor corrige lit_pct : sans lui, la couverture nuageuse est ignorée."""
+
+    async def _run(self, mock_hass, cloud_factor: float, weather_attrs: dict) -> dict:
+        entry = MagicMock()
+        entry.entry_id = "test_entry"
+        entry.data = {}
+        entry.options = {
+            "cloud_factor": cloud_factor,
+            "weather_entity": "weather.home",
+            "windows": [{"name": "salon", "cover_entity": "cover.salon",
+                         "strategy": "always_open", "orientation": 180}],
+        }
+        coord = coordinator_module.SunnyCoordinator(mock_hass, entry)
+        coord.hass = mock_hass
+        coord.data = {}
+        mock_hass.config.latitude = 45.0
+        mock_hass.config.longitude = 5.0
+
+        old = datetime.now(timezone.utc) - timedelta(hours=2)
+        sun_state = _make_mock_state(
+            "above_horizon", old, old, {"elevation": 45.0, "azimuth": 180.0},
+        )
+        weather_state = _make_mock_state("cloudy", old, old, weather_attrs)
+        mock_hass.states.get.side_effect = lambda eid: {
+            "sun.sun": sun_state,
+            "weather.home": weather_state,
+        }.get(eid)
+
+        return await coord._async_update_data()
+
+    async def test_disabled_keeps_geometric_lit(self, mock_hass):
+        results = await self._run(mock_hass, 0, {"cloud_coverage": 100})
+        assert results["cover.salon"]["lit_pct"] > 0
+
+    async def test_full_factor_full_overcast(self, mock_hass):
+        baseline = (await self._run(mock_hass, 0, {"cloud_coverage": 100}))["cover.salon"]["lit_pct"]
+        results = await self._run(mock_hass, 100, {"cloud_coverage": 100})
+        assert baseline > 0
+        assert results["cover.salon"]["lit_pct"] == pytest.approx(0.0)
+
+    async def test_half_factor_halves_lit(self, mock_hass):
+        baseline = (await self._run(mock_hass, 0, {"cloud_coverage": 100}))["cover.salon"]["lit_pct"]
+        results = await self._run(mock_hass, 50, {"cloud_coverage": 100})
+        assert results["cover.salon"]["lit_pct"] == pytest.approx(baseline / 2, rel=1e-3)
+
+    async def test_condition_fallback_without_coverage(self, mock_hass):
+        """Entité météo sans attribut cloud_coverage : la condition (cloudy) suffit."""
+        results = await self._run(mock_hass, 100, {"temperature": 12.0})
+        assert results["cover.salon"]["lit_pct"] == pytest.approx(0.0)

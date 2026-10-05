@@ -25,6 +25,7 @@ from .const import (
     CONF_POSITION_THRESHOLD,
     DEFAULT_POSITION_THRESHOLD,
     CONF_WEATHER_ENTITY,
+    CONF_CLOUD_FACTOR,
     CONF_WINDOWS,
     CONF_WINDOW_NAME,
     CONF_WINDOW_ID,
@@ -60,6 +61,7 @@ from .const import (
     CONF_MAX_ILLUMINATION,
     CONF_STAGGER_DELAY,
     DEFAULT_NAME,
+    DEFAULT_CLOUD_FACTOR,
     DEFAULT_ORIENTATION,
     DEFAULT_WIDTH,
     DEFAULT_HEIGHT,
@@ -208,6 +210,8 @@ def _build_weather_schema() -> vol.Schema:
         vol.Optional(CONF_WEATHER_ENTITY): EntitySelector(
             EntitySelectorConfig(domain="weather")
         ),
+        vol.Optional(CONF_CLOUD_FACTOR, default=DEFAULT_CLOUD_FACTOR):
+            vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
     })
 
 
@@ -275,6 +279,7 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
             self.data[CONF_WEATHER_ENTITY] = user_input.get(CONF_WEATHER_ENTITY, "")
+            self.data[CONF_CLOUD_FACTOR] = user_input.get(CONF_CLOUD_FACTOR, DEFAULT_CLOUD_FACTOR)
             return await self.async_step_window()
 
         return self.async_show_form(
@@ -337,6 +342,7 @@ class SunnyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data={},
                 options={
                     CONF_WEATHER_ENTITY: self.data.get(CONF_WEATHER_ENTITY, ""),
+                    CONF_CLOUD_FACTOR: self.data.get(CONF_CLOUD_FACTOR, DEFAULT_CLOUD_FACTOR),
                     CONF_WINDOWS: self.data[CONF_WINDOWS],
                 },
             )
@@ -539,15 +545,22 @@ class SunnyOptionsFlow(OptionsFlowWithReload):
     async def async_step_weather(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
             self.data[CONF_WEATHER_ENTITY] = user_input.get(CONF_WEATHER_ENTITY, "")
+            self.data[CONF_CLOUD_FACTOR] = user_input.get(CONF_CLOUD_FACTOR, DEFAULT_CLOUD_FACTOR)
             return await self.async_step_init()
 
         current = self.data.get(CONF_WEATHER_ENTITY) or self.entry.data.get(CONF_WEATHER_ENTITY, "")
+        current_factor = self.data.get(
+            CONF_CLOUD_FACTOR,
+            self.entry.data.get(CONF_CLOUD_FACTOR, DEFAULT_CLOUD_FACTOR),
+        )
         return self.async_show_form(
             step_id="weather",
             data_schema=vol.Schema({
                 vol.Optional(CONF_WEATHER_ENTITY, default=current): EntitySelector(
                     EntitySelectorConfig(domain="weather")
                 ),
+                vol.Optional(CONF_CLOUD_FACTOR, default=current_factor):
+                    vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
             }),
         )
 

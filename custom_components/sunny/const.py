@@ -3,6 +3,7 @@
 DOMAIN = "sunny"
 
 CONF_WEATHER_ENTITY = "weather_entity"
+CONF_CLOUD_FACTOR = "cloud_factor"
 CONF_WINDOWS = "windows"
 
 CONF_WINDOW_NAME = "name"
@@ -44,6 +45,7 @@ CONF_LUX_STEP = "lux_step"
 CONF_STAGGER_DELAY = "stagger_delay"
 
 DEFAULT_NAME = "Fenêtre"
+DEFAULT_CLOUD_FACTOR = 0.0
 DEFAULT_ORIENTATION = 180
 DEFAULT_WIDTH = 1.2
 DEFAULT_HEIGHT = 1.4

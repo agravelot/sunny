@@ -76,6 +76,17 @@ Tout point de la fenêtre avec y < y_ombre est à l'ombre ; au-dessus, il reçoi
 
 Et l'énergie reçue est alors **E ∝ cos h · cos γ**, sinon E = 0.
 
+## 7. Influence des nuages (optionnelle)
+
+`lit_pct` (§6) est purement géométrique : il ignore la météo. Un facteur `cloud_factor` (0-100) permet de corriger l'ensoleillement direct selon la fraction de ciel couvert **c** (0-1, issue de l'attribut `cloud_coverage` de l'entité météo, sinon de la condition : `sunny` → 0, `partlycloudy` → 0.5, `cloudy`/`rainy`/`snowy`… → 1) :
+
+**lit_pct_effectif = lit_pct × (1 − c · cloud_factor / 100)**
+
+- `cloud_factor = 0` → nuages ignorés (défaut) ;
+- `cloud_factor = 100` → aucun soleil direct sous un ciel entièrement couvert.
+
+La correction est appliquée une fois dans le coordinateur, avant toutes les stratégies.
+
 ---
 
 Il te manque encore les formules pour obtenir h et As à partir de la latitude/date/heure (déclinaison solaire, angle horaire) — tu veux que je les ajoute ? Je peux aussi te construire un petit simulateur interactif (tu entres orientation, dimensions, épaisseur de mur, distance/hauteur du mur écran, date/heure, et ça calcule/dessine directement quelle surface de la fenêtre est éclairée).
