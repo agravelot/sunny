@@ -179,6 +179,23 @@ class TestSearchCoverPosition:
         pos = strategies.search_cover_position(data, 50.0)
         assert 0 <= pos <= 100
 
+    def test_shadow_mask_built_once(self, monkeypatch):
+        """Le masque d'ombre (coûteux) n'est construit qu'une fois par recherche."""
+        calls = []
+        orig = strategies._build_shadow_mask
+
+        def counting(d):
+            calls.append(1)
+            return orig(d)
+
+        monkeypatch.setattr(strategies, "_build_shadow_mask", counting)
+        strategies.search_cover_position(_full_sun_data(), 50.0)
+        assert len(calls) == 1
+
+        calls.clear()
+        strategies.search_cover_position_max(_full_sun_data(), 30.0)
+        assert len(calls) == 1
+
 
 class TestSearchCoverPositionMax:
     def test_behind(self):

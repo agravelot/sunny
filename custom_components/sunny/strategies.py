@@ -20,11 +20,14 @@ class BaseStrategy(ABC):
         """Calcule la position désirée du store (0=fermé, 100=ouvert)."""
 
 
-def _lit_at_cover_position(data: dict, cover_pos: float) -> float:
+def _lit_at_cover_position(
+    data: dict, cover_pos: float, mask: list[list[bool]] | None = None
+) -> float:
     """Calcule le pourcentage d'éclairement si le store est à cover_pos %.
 
     Utilise un masque d'ombre pré-calculé (ombres d'embrasure + obstacles 3D)
-    et applique le modèle store (tilt / levée) par-dessus.
+    et applique le modèle store (tilt / levée) par-dessus. `mask` permet de
+    réutiliser un masque déjà construit (les recherches l'appellent en boucle).
     """
     Hw = data.get("window_height", 1.0)
     W = data.get("window_width", 1.0)
@@ -37,7 +40,7 @@ def _lit_at_cover_position(data: dict, cover_pos: float) -> float:
     if data.get("behind") or data.get("lit_pct", 0) == 0:
         return 0.0
 
-    mask = _build_shadow_mask(data)
+    mask = mask if mask is not None else _build_shadow_mask(data)
     if not mask:
         return 0.0
 
@@ -157,15 +160,20 @@ def search_cover_position(data: dict, target_pct: float) -> int:
     if data.get("behind") or data.get("lit_pct", 0) == 0:
         return 100
 
+    # Le masque d'ombre ne dépend que des données de la fenêtre : constant
+    # pendant toute la recherche. On le calcule une fois et on le passe aux
+    # appels au lieu de le reconstruire (~28×/fenêtre/rafraîchissement).
+    mask = _build_shadow_mask(data)
+
     # Étape 1 : balayage par pas de 5 %
     lo, hi = 100, 0
     found = False
-    prev_lit = _lit_at_cover_position(data, 0)
+    prev_lit = _lit_at_cover_position(data, 0, mask)
     if prev_lit >= target_pct:
         return 0  # même tout fermé, assez de lumière (cas rare)
 
     for p in range(5, 101, 5):
-        lit = _lit_at_cover_position(data, p)
+        lit = _lit_at_cover_position(data, p, mask)
         if prev_lit < target_pct <= lit:
             lo, hi = p - 5, p
             found = True
@@ -181,7 +189,7 @@ def search_cover_position(data: dict, target_pct: float) -> int:
     # Étape 2 : recherche binaire dans [lo, hi] pour trouver le minimum >= target_pct
     for _ in range(8):
         mid = (lo + hi) / 2.0
-        lit = _lit_at_cover_position(data, mid)
+        lit = _lit_at_cover_position(data, mid, mask)
         if lit >= target_pct:
             hi = mid
         else:
@@ -199,25 +207,28 @@ def search_cover_position_max(data: dict, max_pct: float) -> int:
     if data.get("behind") or data.get("lit_pct", 0) == 0:
         return 100
 
+    # Masque constant pendant la recherche : calculé une fois (cf. ci-dessus).
+    mask = _build_shadow_mask(data)
+
     # Même tout ouvert, on reste sous le plafond : on ouvre en grand.
-    if _lit_at_cover_position(data, 100) <= max_pct:
+    if _lit_at_cover_position(data, 100, mask) <= max_pct:
         return 100
 
     # Même tout fermé, on dépasse le plafond : on ne peut pas faire mieux.
-    if _lit_at_cover_position(data, 0) > max_pct:
+    if _lit_at_cover_position(data, 0, mask) > max_pct:
         return 0
 
     # Étape 1 : balayage par pas de 5 % pour localiser la traversée.
     lo, hi = 0, 100
     for p in range(5, 101, 5):
-        if _lit_at_cover_position(data, p) > max_pct:
+        if _lit_at_cover_position(data, p, mask) > max_pct:
             lo, hi = p - 5, p
             break
 
     # Étape 2 : recherche binaire de la position la plus ouverte ≤ max_pct.
     for _ in range(8):
         mid = (lo + hi) / 2.0
-        if _lit_at_cover_position(data, mid) <= max_pct:
+        if _lit_at_cover_position(data, mid, mask) <= max_pct:
             lo = mid
         else:
             hi = mid
